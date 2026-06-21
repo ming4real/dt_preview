@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { renderHtml } from "./renderHtml";
-import { resolveIncludes } from "../dts/includeResolver";
+import { resolveIncludesWithDiagnostics } from "../dts/includeResolver";
 import { parseDtsChunks } from "../dts/parser";
 import { mergeTrees } from "../dts/merger";
 
@@ -33,8 +33,9 @@ export class DeviceTreePreviewPanel {
     }
 
     try {
-      const chunks = resolveIncludes(sourceFile);
+      const { chunks, diagnostics } = resolveIncludesWithDiagnostics(sourceFile);
       const parsed = parseDtsChunks(chunks, sourceFile);
+      parsed.diagnostics = diagnostics;
       const merged = mergeTrees(parsed);
 
       this.panel.webview.html = renderHtml(merged);

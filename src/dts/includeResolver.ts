@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { DtDiagnostic, SourceSpan } from "./types";
 
 export type SourceChunk = {
   file: string;
@@ -7,11 +8,25 @@ export type SourceChunk = {
   startLine: number;
 };
 
+export type IncludeResolution = {
+  chunks: SourceChunk[];
+  diagnostics: DtDiagnostic[];
+};
+
 export function lineNumberAt(text: string, index: number): number {
   return text.slice(0, index).split(/\r?\n/).length;
 }
 
-export function resolveIncludes(entryFile: string, seen = new Set<string>()): SourceChunk[] {
+function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT";
+}
+
+function resolveIncludesInternal(
+  entryFile: string,
+  seen: Set<string>,
+  diagnostics: DtDiagnostic[],
+  includeSource?: SourceSpan
+): SourceChunk[] {
   const abs = path.resolve(entryFile);
 
   if (seen.has(abs)) {
@@ -20,7 +35,24 @@ export function resolveIncludes(entryFile: string, seen = new Set<string>()): So
 
   seen.add(abs);
 
-  const text = fs.readFileSync(abs, "utf8");
+  let text: string;
+
+  try {
+    text = fs.readFileSync(abs, "utf8");
+  } catch (error) {
+    if (isMissingFileError(error) && includeSource) {
+      diagnostics.push({
+        severity: "warning",
+        message: `Included file not found: ${abs}`,
+        source: includeSource,
+      });
+
+      return [];
+    }
+
+    throw error;
+  }
+
   const dir = path.dirname(abs);
 
   const chunks: SourceChunk[] = [];
@@ -38,7 +70,12 @@ export function resolveIncludes(entryFile: string, seen = new Set<string>()): So
     });
 
     const includePath = path.resolve(dir, match[1]);
-    chunks.push(...resolveIncludes(includePath, seen));
+    const includeLine = lineNumberAt(text, match.index);
+    chunks.push(...resolveIncludesInternal(includePath, seen, diagnostics, {
+      file: abs,
+      startLine: includeLine,
+      endLine: includeLine,
+    }));
 
     lastIndex = includeRegex.lastIndex;
   }
@@ -50,6 +87,17 @@ export function resolveIncludes(entryFile: string, seen = new Set<string>()): So
   });
 
   return chunks;
+}
+
+export function resolveIncludes(entryFile: string, seen = new Set<string>()): SourceChunk[] {
+  return resolveIncludesInternal(entryFile, seen, []);
+}
+
+export function resolveIncludesWithDiagnostics(entryFile: string): IncludeResolution {
+  const diagnostics: DtDiagnostic[] = [];
+  const chunks = resolveIncludesInternal(entryFile, new Set<string>(), diagnostics);
+
+  return { chunks, diagnostics };
 }
 
 export function buildExpandedText(chunks: SourceChunk[]): string {

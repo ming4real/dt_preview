@@ -1,10 +1,14 @@
 import * as assert from 'assert';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 // You can import and use all API from the 'vscode' module
 // as well as import your extension to test it
 import * as vscode from 'vscode';
 // import * as myExtension from '../../extension';
-import { parseDts } from '../dts/parser';
+import { resolveIncludesWithDiagnostics } from '../dts/includeResolver';
+import { parseDts, parseDtsChunks } from '../dts/parser';
 import { mergeTrees } from '../dts/merger';
 import { DtNode } from '../dts/types';
 
@@ -20,6 +24,30 @@ function child(node: DtNode, name: string, unitAddress?: string): DtNode {
 
 function prop(node: DtNode, name: string): string | undefined {
 	return node.properties.find(item => item.name === name)?.value;
+}
+
+function withFiles(files: Record<string, string>, run: (dir: string) => void) {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dtbe-test-'));
+
+	try {
+		for (const [name, text] of Object.entries(files)) {
+			const file = path.join(dir, name);
+			fs.mkdirSync(path.dirname(file), { recursive: true });
+			fs.writeFileSync(file, text);
+		}
+
+		run(dir);
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+}
+
+function mergeFile(entryFile: string): DtNode {
+	const { chunks, diagnostics } = resolveIncludesWithDiagnostics(entryFile);
+	const parsed = parseDtsChunks(chunks, entryFile);
+	parsed.diagnostics = diagnostics;
+
+	return mergeTrees(parsed);
 }
 
 suite('Extension Test Suite', () => {
@@ -186,5 +214,65 @@ fragment@1 {
 		assert.ok(root.diagnostics?.some(item => item.message.includes('&missing')));
 		assert.ok(root.diagnostics?.some(item => item.message.includes('&also_missing')));
 		assert.ok(root.diagnostics?.some(item => item.message.includes('/missing/path')));
+	});
+
+	test('resolves an existing include file', () => {
+		withFiles({
+			'main.dts': '#include "base.dtsi"\n/ { main-node {}; };\n',
+			'base.dtsi': '/ { included-node { status = "okay"; }; };\n',
+		}, dir => {
+			const root = mergeFile(path.join(dir, 'main.dts'));
+
+			assert.strictEqual(root.diagnostics?.length, 0);
+			assert.strictEqual(prop(child(root, 'included-node'), 'status'), '"okay"');
+			child(root, 'main-node');
+		});
+	});
+
+	test('reports a missing include file as a warning', () => {
+		withFiles({
+			'main.dts': '#include "no_file.dtsi"\n/ { surviving-node {}; };\n',
+		}, dir => {
+			const missingPath = path.join(dir, 'no_file.dtsi');
+			const root = mergeFile(path.join(dir, 'main.dts'));
+
+			child(root, 'surviving-node');
+			assert.ok(root.diagnostics?.some(item => item.message === `Included file not found: ${missingPath}`));
+		});
+	});
+
+	test('reports a nested missing include file as a warning', () => {
+		withFiles({
+			'main.dts': '#include "sub/outer.dtsi"\n/ { main-node {}; };\n',
+			'sub/outer.dtsi': '#include "missing.dtsi"\n/ { outer-node {}; };\n',
+		}, dir => {
+			const missingPath = path.join(dir, 'sub', 'missing.dtsi');
+			const root = mergeFile(path.join(dir, 'main.dts'));
+
+			child(root, 'main-node');
+			child(root, 'outer-node');
+			assert.ok(root.diagnostics?.some(item => item.message === `Included file not found: ${missingPath}`));
+		});
+	});
+
+	test('continues through multiple includes when one is missing', () => {
+		withFiles({
+			'main.dts': [
+				'#include "a.dtsi"',
+				'#include "missing.dtsi"',
+				'#include "b.dtsi"',
+				'/ { main-node {}; };',
+			].join('\n'),
+			'a.dtsi': '/ { a-node {}; };\n',
+			'b.dtsi': '/ { b-node {}; };\n',
+		}, dir => {
+			const missingPath = path.join(dir, 'missing.dtsi');
+			const root = mergeFile(path.join(dir, 'main.dts'));
+
+			child(root, 'a-node');
+			child(root, 'b-node');
+			child(root, 'main-node');
+			assert.ok(root.diagnostics?.some(item => item.message === `Included file not found: ${missingPath}`));
+		});
 	});
 });

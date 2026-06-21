@@ -46,14 +46,14 @@ function createContext(root: DtNode): MergeContext {
     properties: [],
     children: [],
     source: { ...root.source },
-    diagnostics: [],
+    diagnostics: root.diagnostics ? [...root.diagnostics] : [],
   };
 
   const ctx: MergeContext = {
     root: mergedRoot,
     labels: new Map(),
     paths: new Map(),
-    warnings: [],
+    warnings: root.diagnostics ? [...root.diagnostics] : [],
     fragments: [],
   };
 
