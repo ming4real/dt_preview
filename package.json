@@ -13,8 +13,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "dtbe.helloWorld",
-        "title": "Hello World"
+        "command": "dtbEditor.openPreview",
+        "title": "Device Tree: Open Preview"
       }
     ]
   },
