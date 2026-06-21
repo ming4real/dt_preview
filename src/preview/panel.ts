@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { renderHtml } from "./renderHtml";
-import { resolveIncludes, buildExpandedText } from "../dts/includeResolver";
-import { parseDts } from "../dts/parser";
+import { resolveIncludes } from "../dts/includeResolver";
+import { parseDtsChunks } from "../dts/parser";
 import { mergeTrees } from "../dts/merger";
 
 export class DeviceTreePreviewPanel {
@@ -34,8 +34,7 @@ export class DeviceTreePreviewPanel {
 
     try {
       const chunks = resolveIncludes(sourceFile);
-      const expanded = buildExpandedText(chunks);
-      const parsed = parseDts(expanded, sourceFile);
+      const parsed = parseDtsChunks(chunks, sourceFile);
       const merged = mergeTrees(parsed);
 
       this.panel.webview.html = renderHtml(merged);

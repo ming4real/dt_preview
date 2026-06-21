@@ -1,10 +1,32 @@
 import { lexDts, Token } from "./lexer";
+import { SourceChunk } from "./includeResolver";
 import { DtNode, DtProperty, SourceSpan } from "./types";
+
+export function parseDtsChunks(chunks: SourceChunk[], rootFile: string): DtNode {
+  const tokens = chunks
+    .flatMap(chunk => lexDts(chunk.text, chunk.file, chunk.startLine))
+    .filter(t => t.type !== "comment" && t.type !== "eof");
+
+  tokens.push({
+    type: "eof",
+    value: "",
+    location: {
+      file: rootFile,
+      line: 1,
+      column: 1,
+      offset: 0,
+    },
+  });
+
+  return parseTokens(tokens, rootFile);
+}
 
 export function parseDts(text: string, file: string): DtNode {
   const tokens = lexDts(text, file).filter(t => t.type !== "comment");
-  console.log("Reading file: " + file);
+  return parseTokens(tokens, file);
+}
 
+function parseTokens(tokens: Token[], file: string): DtNode {
   let pos = 0;
 
   function peek(offset = 0): Token {

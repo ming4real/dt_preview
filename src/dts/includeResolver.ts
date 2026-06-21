@@ -4,7 +4,12 @@ import * as path from "path";
 export type SourceChunk = {
   file: string;
   text: string;
+  startLine: number;
 };
+
+export function lineNumberAt(text: string, index: number): number {
+  return text.slice(0, index).split(/\r?\n/).length;
+}
 
 export function resolveIncludes(entryFile: string, seen = new Set<string>()): SourceChunk[] {
   const abs = path.resolve(entryFile);
@@ -29,6 +34,7 @@ export function resolveIncludes(entryFile: string, seen = new Set<string>()): So
     chunks.push({
       file: abs,
       text: text.slice(lastIndex, match.index),
+      startLine: lineNumberAt(text, lastIndex),
     });
 
     const includePath = path.resolve(dir, match[1]);
@@ -40,6 +46,7 @@ export function resolveIncludes(entryFile: string, seen = new Set<string>()): So
   chunks.push({
     file: abs,
     text: text.slice(lastIndex),
+    startLine: lineNumberAt(text, lastIndex),
   });
 
   return chunks;

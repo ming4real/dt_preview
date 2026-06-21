@@ -24,11 +24,11 @@ const SYMBOLS = new Set([
   "{", "}", ";", "=", "<", ">", "[", "]", ":", ",", "@", "&", "/", "(", ")",
 ]);
 
-export function lexDts(input: string, file: string): Token[] {
+export function lexDts(input: string, file: string, startLine = 1): Token[] {
   const tokens: Token[] = [];
 
   let i = 0;
-  let line = 1;
+  let line = startLine;
   let column = 1;
 
   function loc(): SourceLocation {
