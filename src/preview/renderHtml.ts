@@ -52,6 +52,14 @@ function renderNode(node: DtNode, depth = 0): string {
 }
 
 export function renderHtml(root: DtNode): string {
+  const diagnostics = root.diagnostics?.map(diagnostic => `
+<div class="diagnostic warning">
+  <span class="diagnostic-severity">${escapeHtml(diagnostic.severity)}</span>
+  <span>${escapeHtml(diagnostic.message)}</span>
+  ${diagnostic.source ? `<span class="source">${escapeHtml(diagnostic.source.file)}:${diagnostic.source.startLine}</span>` : ""}
+</div>
+`).join("") ?? "";
+
   return `
 <!DOCTYPE html>
 <html>
@@ -83,9 +91,22 @@ body {
   margin-left: 12px;
   font-size: 0.85em;
 }
+
+.diagnostic {
+  padding: 6px 8px;
+  border-left: 6px solid var(--vscode-editorWarning-foreground);
+  background: var(--vscode-inputValidation-warningBackground);
+  margin-bottom: 6px;
+}
+
+.diagnostic-severity {
+  font-weight: bold;
+  margin-right: 8px;
+}
 </style>
 </head>
 <body>
+${diagnostics}
 ${renderNode(root)}
 </body>
 </html>

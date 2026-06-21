@@ -87,7 +87,7 @@ function parseTokens(tokens: Token[], file: string): DtNode {
     };
   }
 
-  function parseNode(firstToken: Token): DtNode {
+  function parseNode(firstToken: Token, kind: DtNode["kind"] = "node"): DtNode {
     let name = firstToken.value;
     let unitAddress: string | undefined;
     const labels: string[] = [];
@@ -106,9 +106,50 @@ function parseTokens(tokens: Token[], file: string): DtNode {
       name,
       unitAddress,
       labels,
+      kind,
       properties: [],
       children: [],
       source: spanFrom(firstToken),
+    };
+
+    if (!match("{")) {
+      return node;
+    }
+
+    while (peek() && peek().type !== "eof" && peek().value !== "}") {
+      const current = advance();
+
+      if (current.type !== "identifier" && current.value !== "/") {
+        continue;
+      }
+
+      const next = peek();
+
+      if (next?.value === "{" || next?.value === "@" || next?.value === ":") {
+        node.children.push(parseNode(current));
+      } else {
+        node.properties.push(parseProperty(current));
+      }
+    }
+
+    const end = advance();
+    match(";");
+
+    node.source.endLine = end.location.line;
+
+    return node;
+  }
+
+  function parseReferencePatch(ampersand: Token): DtNode {
+    const labelToken = advance();
+    const node: DtNode = {
+      name: `&${labelToken.value}`,
+      labels: [],
+      kind: "reference",
+      referenceLabel: labelToken.value,
+      properties: [],
+      children: [],
+      source: spanFrom(ampersand),
     };
 
     if (!match("{")) {
@@ -155,7 +196,9 @@ function parseTokens(tokens: Token[], file: string): DtNode {
     const token = advance();
 
     if (token.value === "/" && peek()?.value === "{") {
-      root.children.push(parseNode(token));
+      root.children.push(parseNode(token, "root"));
+    } else if (token.value === "&" && peek()?.type === "identifier") {
+      root.children.push(parseReferencePatch(token));
     } else if (token.type === "identifier") {
       if (peek()?.value === "{" || peek()?.value === "@" || peek()?.value === ":") {
         root.children.push(parseNode(token));

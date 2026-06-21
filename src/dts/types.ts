@@ -1,9 +1,13 @@
-import { SourceLocation } from "./lexer";
-
 export type SourceSpan = {
   file: string;
   startLine: number;
   endLine: number;
+};
+
+export type DtDiagnostic = {
+  severity: "warning";
+  message: string;
+  source?: SourceSpan;
 };
 
 export type DtProperty = {
@@ -16,7 +20,10 @@ export type DtNode = {
   name: string;
   unitAddress?: string;
   labels: string[];
+  kind?: "node" | "root" | "reference";
+  referenceLabel?: string;
   properties: DtProperty[];
   children: DtNode[];
   source: SourceSpan;
+  diagnostics?: DtDiagnostic[];
 };
