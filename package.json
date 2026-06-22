@@ -15,8 +15,25 @@
       {
         "command": "dtbEditor.openPreview",
         "title": "Device Tree: Open Preview"
+      },
+      {
+        "command": "dtbEditor.previewThisDtsAsRoot",
+        "title": "Device Tree: Preview This DTS as Root"
+      },
+      {
+        "command": "dtbEditor.useActiveEditorAsRoot",
+        "title": "Use Active Editor as Root"
       }
-    ]
+    ],
+    "menus": {
+      "webview/title": [
+        {
+          "command": "dtbEditor.useActiveEditorAsRoot",
+          "when": "webviewId == 'deviceTreePreview'",
+          "group": "navigation"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

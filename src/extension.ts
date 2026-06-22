@@ -2,16 +2,23 @@ import * as vscode from "vscode";
 import { DeviceTreePreviewPanel } from "./preview/panel";
 
 export function activate(context: vscode.ExtensionContext) {
-  const command = vscode.commands.registerCommand("dtbEditor.openPreview", () => {
+  function previewActiveEditorAsRoot() {
     const editor = vscode.window.activeTextEditor;
 
     if (!editor) {
-      vscode.window.showErrorMessage("Open a .dts or .dtsi file first.");
+      vscode.window.showErrorMessage("Open a .dts file first.");
       return;
     }
 
-    DeviceTreePreviewPanel.show(context, editor.document.uri.fsPath);
+    DeviceTreePreviewPanel.previewThisDtsAsRoot(editor.document.uri.fsPath);
+  }
+
+  const openPreview = vscode.commands.registerCommand("dtbEditor.openPreview", () => {
+    DeviceTreePreviewPanel.show();
   });
+
+  const previewRoot = vscode.commands.registerCommand("dtbEditor.previewThisDtsAsRoot", previewActiveEditorAsRoot);
+  const useActiveEditorAsRoot = vscode.commands.registerCommand("dtbEditor.useActiveEditorAsRoot", previewActiveEditorAsRoot);
 
   const changeWatcher = vscode.workspace.onDidChangeTextDocument(event => {
     const file = event.document.uri.fsPath;
@@ -21,7 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
-  context.subscriptions.push(command, changeWatcher);
+  context.subscriptions.push(openPreview, previewRoot, useActiveEditorAsRoot, changeWatcher);
 }
 
 export function deactivate() {}

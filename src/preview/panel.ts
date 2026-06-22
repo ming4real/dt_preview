@@ -9,13 +9,11 @@ import { mergeTrees } from "../dts/merger";
 export class DeviceTreePreviewPanel {
   private static panel: vscode.WebviewPanel | undefined;
   private static output: vscode.OutputChannel | undefined;
-  private static rootFile: string | undefined;
+  private static activeRootDts: string | undefined;
   private static dependencyGraph = new Map<string, Set<string>>();
   private static dependencyClosure = new Set<string>();
 
-  static show(context: vscode.ExtensionContext, sourceFile: string) {
-    this.rootFile = path.resolve(sourceFile);
-
+  private static ensurePanel() {
     if (!this.panel) {
       this.panel = vscode.window.createWebviewPanel(
         "deviceTreePreview",
@@ -29,19 +27,68 @@ export class DeviceTreePreviewPanel {
 
       this.panel.onDidDispose(() => {
         this.panel = undefined;
-        this.rootFile = undefined;
+        this.activeRootDts = undefined;
         this.dependencyGraph.clear();
         this.dependencyClosure.clear();
       });
     }
-
-    this.update(this.rootFile);
   }
 
-  static update(sourceFile: string, changedFile = sourceFile) {
-    if (!this.panel) {
+  static show() {
+    this.ensurePanel();
+
+    if (this.activeRootDts) {
+      this.update(this.activeRootDts, this.activeRootDts, "manual refresh");
       return;
     }
+
+    this.panel!.webview.html = renderHtml({
+      name: "/",
+      labels: [],
+      properties: [],
+      children: [],
+      deleteDirectives: [],
+      source: {
+        file: "",
+        startLine: 1,
+        endLine: 1,
+      },
+      diagnostics: [{
+        severity: "warning",
+        message: "No preview root selected. Run Device Tree: Preview This DTS as Root.",
+      }],
+    });
+  }
+
+  static previewThisDtsAsRoot(sourceFile: string): boolean {
+    const rootFile = path.resolve(sourceFile);
+
+    if (path.extname(rootFile) !== ".dts") {
+      vscode.window.showErrorMessage("Select a .dts file to use as the preview root.");
+      this.log({
+        rootFile,
+        changedFile: rootFile,
+        trigger: "root selection rejected",
+        durationMs: 0,
+      });
+      return false;
+    }
+
+    this.ensurePanel();
+    this.activeRootDts = rootFile;
+    this.log({
+      rootFile,
+      changedFile: rootFile,
+      trigger: "root selection",
+      durationMs: 0,
+    });
+    this.update(rootFile, rootFile, "root selection");
+
+    return true;
+  }
+
+  static update(sourceFile: string, changedFile = sourceFile, trigger = "manual rebuild") {
+    this.ensurePanel();
 
     try {
       const rootFile = path.resolve(sourceFile);
@@ -51,23 +98,23 @@ export class DeviceTreePreviewPanel {
       parsed.diagnostics = diagnostics;
       const merged = mergeTrees(parsed);
 
-      this.rootFile = rootFile;
       this.dependencyGraph = dependencyGraph;
       this.dependencyClosure = collectTransitiveIncludes(rootFile, dependencyGraph);
-      this.panel.webview.html = renderHtml(merged);
+      this.activeRootDts = rootFile;
+      this.panel!.webview.html = renderHtml(merged, rootFile);
       this.log({
         rootFile,
         changedFile: path.resolve(changedFile),
-        triggered: true,
+        trigger,
         durationMs: Date.now() - started,
       });
     } catch (error) {
-      this.panel.webview.html = `<pre>${String(error)}</pre>`;
+      this.panel!.webview.html = `<pre>${String(error)}</pre>`;
     }
   }
 
   static handleDocumentChange(changedFile: string) {
-    const rootFile = this.rootFile;
+    const rootFile = this.activeRootDts;
     const resolvedChangedFile = path.resolve(changedFile);
 
     if (!rootFile) {
@@ -78,14 +125,15 @@ export class DeviceTreePreviewPanel {
     const started = Date.now();
 
     if (shouldRebuild) {
-      this.update(rootFile, resolvedChangedFile);
+      const trigger = resolvedChangedFile === rootFile ? "root change" : "dependency change";
+      this.update(rootFile, resolvedChangedFile, trigger);
       return;
     }
 
     this.log({
       rootFile,
       changedFile: resolvedChangedFile,
-      triggered: shouldRebuild,
+      trigger: "unrelated change",
       durationMs: Date.now() - started,
     });
   }
@@ -100,15 +148,14 @@ export class DeviceTreePreviewPanel {
   private static log(entry: {
     rootFile: string;
     changedFile: string;
-    triggered: boolean;
+    trigger: string;
     durationMs: number;
   }) {
     this.output ??= vscode.window.createOutputChannel("Device Tree Preview");
-    this.output.appendLine([
-      `root DTS: ${entry.rootFile}`,
-      `changed file: ${entry.changedFile}`,
-      `rebuild triggered: ${entry.triggered}`,
-      `rebuild duration: ${entry.durationMs}ms`,
-    ].join(" | "));
+    this.output.appendLine("[DTB Editor]");
+    this.output.appendLine(`Root DTS: ${entry.rootFile}`);
+    this.output.appendLine(`Changed: ${entry.changedFile}`);
+    this.output.appendLine(`Trigger: ${entry.trigger}`);
+    this.output.appendLine(`Rebuild: ${entry.durationMs} ms`);
   }
 }

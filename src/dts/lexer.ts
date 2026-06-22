@@ -121,7 +121,9 @@ export function lexDts(input: string, file: string, startLine = 1): Token[] {
           continue;
         }
 
-        if (c === '"') break;
+        if (c === '"') { 
+          break;
+        }
       }
 
       add("string", value, start);

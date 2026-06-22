@@ -1,4 +1,5 @@
 import { DtNode } from "../dts/types";
+import * as path from "path";
 
 function escapeHtml(value: string): string {
   return value
@@ -77,7 +78,7 @@ function renderNode(node: DtNode, depth = 0, ancestorDeleted = false): string {
   return html;
 }
 
-export function renderHtml(root: DtNode): string {
+export function renderHtml(root: DtNode, rootFile?: string): string {
   const diagnostics = root.diagnostics?.map(diagnostic => `
 <div class="diagnostic warning">
   <span class="diagnostic-severity">${escapeHtml(diagnostic.severity)}</span>
@@ -85,6 +86,13 @@ export function renderHtml(root: DtNode): string {
   ${diagnostic.source ? `<span class="source">${escapeHtml(diagnostic.source.file)}:${diagnostic.source.startLine}</span>` : ""}
 </div>
 `).join("") ?? "";
+  const rootBanner = rootFile ? `
+<div class="preview-root" title="${escapeHtml(rootFile)}">
+  <span class="preview-root-label">Preview Root:</span>
+  <span>${escapeHtml(path.basename(rootFile))}</span>
+  <span class="preview-root-path">${escapeHtml(rootFile)}</span>
+</div>
+` : "";
 
   return `
 <!DOCTYPE html>
@@ -96,6 +104,27 @@ body {
   font-size: var(--vscode-editor-font-size);
   background: var(--vscode-editor-background);
   color: var(--vscode-editor-foreground);
+}
+
+.preview-root {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editor-background);
+  white-space: nowrap;
+}
+
+.preview-root-label {
+  font-weight: bold;
+  margin-right: 6px;
+}
+
+.preview-root-path {
+  opacity: 0.65;
+  margin-left: 12px;
+  font-size: 0.85em;
 }
 
 .node, .prop {
@@ -151,6 +180,7 @@ body {
 </style>
 </head>
 <body>
+${rootBanner}
 ${diagnostics}
 ${renderNode(root)}
 </body>

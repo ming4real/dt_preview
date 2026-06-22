@@ -272,6 +272,15 @@ fragment@1 {
 		assert.ok(!html.includes('<span class="label">undefined:</span>'));
 	});
 
+	test('renders the selected preview root at the top', () => {
+		const root = merge('/ { node {}; };');
+		const html = renderHtml(root, '/boards/board-a.dts');
+
+		assert.ok(html.includes('<span class="preview-root-label">Preview Root:</span>'));
+		assert.ok(html.includes('<span>board-a.dts</span>'));
+		assert.ok(html.includes('title="/boards/board-a.dts"'));
+	});
+
 	test('handles missing display labels while parsing and rendering', () => {
 		const root = merge(`
 / {

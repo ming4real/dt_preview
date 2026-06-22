@@ -1,71 +1,263 @@
-# dtbe README
+# Device Tree Editor (DTBE)
 
-This is the README for your extension "dtbe". After writing up a brief description, we recommend including the following sections.
+A Visual Studio Code extension for exploring, editing, and understanding Linux Device Trees.
+
+DTBE provides a live preview of the fully merged Device Tree while preserving the origin of every node and property, making it easier to work with complex `.dts` and `.dtsi` hierarchies.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+### Live Merged Preview
 
-For example if there is an image subfolder under your extension project workspace:
+Open a Device Tree source file and view the fully resolved tree alongside the editor.
 
-\!\[feature X\]\(images/feature-x.png\)
+The preview:
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+- Resolves `/include/` directives
+- Merges included files
+- Applies overlays
+- Resolves label references (`&label`)
+- Displays the final effective Device Tree
 
-## Requirements
+### Source Tracking
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+Every node and property retains information about where it originated.
 
-## Extension Settings
+The preview uses color coding to show:
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+- Original `.dts` file content
+- Included `.dtsi` content
+- Overlay modifications
+- Generated merge results
 
-For example:
+This makes it easy to understand:
 
-This extension contributes the following settings:
+- Where a setting comes from
+- Which file overrides a value
+- How overlays affect the final tree
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+### Overlay Support
 
-## Known Issues
+Supports:
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+```dts
+/ {
+    ...
+};
 
-## Release Notes
+&uart0 {
+    status = "okay";
+};
 
-Users appreciate release notes as you update your extension.
+&i2c0 {
+    ...
+};
+```
 
-### 1.0.0
+Including accurate merging of:
 
-Initial release of ...
+- `/ { ... };`
+- `&label { ... };`
+- Multiple overlays targeting the same node
 
-### 1.0.1
+### Delete Directives
 
-Fixed issue #.
+Supports:
 
-### 1.1.0
+```dts
+/delete-node/ node_name;
 
-Added features X, Y, and Z.
+/delete-property/ property_name;
+```
 
----
+Deleted content is preserved in the preview:
 
-## Following extension guidelines
+- Displayed in grey
+- Marked as deleted
+- Annotated with the location of the delete directive
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+Example:
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+```dts
+/* Deleted by board.dtsi:42 */
 
-## Working with Markdown
+ethernet@1000 {
+    status = "disabled";
+};
+```
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+### Label Display
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+Node labels are displayed in the merged view.
 
-## For more information
+Example:
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+```dts
+uart0: serial@1000 {
+    status = "okay";
+};
+```
 
-**Enjoy!**
+### Missing Include Warnings
+
+Missing include files generate warnings instead of errors.
+
+Example:
+
+```text
+Warning: Unable to resolve include:
+soc/nonexistent.dtsi
+```
+
+The preview continues rendering with the remaining files.
+
+## Installation
+
+### From VSIX
+
+Install a packaged extension:
+
+```bash
+code --install-extension dtbe-x.y.z.vsix
+```
+
+Or:
+
+1. Open Extensions
+2. Click `...`
+3. Select **Install from VSIX...**
+4. Choose the generated `.vsix`
+
+## Development
+
+### Prerequisites
+
+- Node.js
+- npm
+- Visual Studio Code
+
+### Install Dependencies
+
+```bash
+npm install
+```
+
+### Build
+
+```bash
+npm run compile
+```
+
+### Run Extension
+
+Press:
+
+```text
+F5
+```
+
+This launches a new Extension Development Host window.
+
+Open a Device Tree file and run:
+
+```text
+DTBE: Open Preview
+```
+
+## Packaging
+
+Install VSCE:
+
+```bash
+npm install -g @vscode/vsce
+```
+
+Create a VSIX package:
+
+```bash
+vsce package
+```
+
+This generates:
+
+```text
+dtbe-0.0.1.vsix
+```
+
+Install:
+
+```bash
+code --install-extension dtbe-0.0.1.vsix
+```
+
+## Supported Merge Operations
+
+### Includes
+
+```dts
+/include/ "soc.dtsi"
+```
+
+### Root Merges
+
+```dts
+/ {
+    chosen {
+        ...
+    };
+};
+```
+
+### Label References
+
+```dts
+&uart0 {
+    status = "okay";
+};
+```
+
+### Multiple Overlay Fragments
+
+```dts
+&uart0 {
+    current-speed = <115200>;
+};
+
+&uart0 {
+    status = "okay";
+};
+```
+
+### Delete Property
+
+```dts
+/delete-property/ status;
+```
+
+### Delete Node
+
+```dts
+/delete-node/ ethernet@1000;
+```
+
+## Known Limitations
+
+Current focus is on providing an accurate visualization of the final Device Tree.
+
+Potential future improvements:
+
+- Full Device Tree grammar support
+- DTS schema validation
+- Cross-reference navigation
+- Property value diffing
+- Search and filtering
+- Export merged DTS
+- Live editing of merged nodes
+- Device Tree Compiler integration
+
+## License
+
+MIT License
+
+## Acknowledgements
+
+Built for Linux Device Tree developers who need to understand large DTS hierarchies, overlays, and board-specific customizations without manually tracing dozens of included files.
