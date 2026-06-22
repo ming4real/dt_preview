@@ -19,6 +19,7 @@ export type DtProperty = {
 export type DtNode = {
   name: string;
   unitAddress?: string;
+  label?: string;
   labels: string[];
   kind?: "node" | "root" | "reference";
   referenceLabel?: string;

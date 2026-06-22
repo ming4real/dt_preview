@@ -11,6 +11,7 @@ import { resolveIncludesWithDiagnostics } from '../dts/includeResolver';
 import { parseDts, parseDtsChunks } from '../dts/parser';
 import { mergeTrees } from '../dts/merger';
 import { DtNode } from '../dts/types';
+import { renderHtml } from '../preview/renderHtml';
 
 function merge(text: string): DtNode {
 	return mergeTrees(parseDts(text, '/test.dts'));
@@ -88,7 +89,22 @@ suite('Extension Test Suite', () => {
 `);
 
 		const uart = child(child(root, 'soc'), 'serial', '1000');
+		assert.strictEqual(uart.label, 'uart0');
 		assert.strictEqual(prop(uart, 'status'), '"okay"');
+	});
+
+	test('parses labeled nodes with display labels', () => {
+		const root = parseDts(`
+/ {
+	uart0: serial@40002000 {
+		status = "okay";
+	};
+};
+`, '/test.dts');
+
+		const serial = child(child(root, '/'), 'serial', '40002000');
+		assert.strictEqual(serial.label, 'uart0');
+		assert.deepStrictEqual(serial.labels, ['uart0']);
 	});
 
 	test('applies overlay fragments by target label', () => {
@@ -189,7 +205,77 @@ fragment@1 {
 };
 `);
 
-		assert.strictEqual(prop(child(root, 'serial', '1000'), 'current-speed'), '< 115200 >');
+		const serial = child(root, 'serial', '1000');
+		assert.strictEqual(serial.label, 'uart0');
+		assert.strictEqual(prop(serial, 'current-speed'), '< 115200 >');
+	});
+
+	test('preserves target labels after merging label overlays', () => {
+		const root = merge(`
+/ {
+	uart0: serial@40002000 {
+		status = "okay";
+	};
+};
+&uart0 {
+	current-speed = <115200>;
+};
+`);
+
+		const serial = child(root, 'serial', '40002000');
+		const html = renderHtml(root);
+
+		assert.strictEqual(serial.label, 'uart0');
+		assert.strictEqual(prop(serial, 'status'), '"okay"');
+		assert.strictEqual(prop(serial, 'current-speed'), '< 115200 >');
+		assert.ok(html.includes('<span class="label">uart0:</span> <span class="node-name">serial@40002000</span> {'));
+	});
+
+	test('does not overwrite an existing target display label during merge', () => {
+		const root = merge(`
+/ {
+	uart0: serial@40002000 {
+		status = "disabled";
+	};
+};
+/ {
+	other_uart: serial@40002000 {
+		status = "okay";
+	};
+};
+`);
+
+		const serial = child(root, 'serial', '40002000');
+		assert.strictEqual(serial.label, 'uart0');
+		assert.deepStrictEqual(serial.labels, ['uart0', 'other_uart']);
+	});
+
+	test('renders labeled and unlabeled nodes', () => {
+		const root = merge(`
+/ {
+	uart0: serial@40002000 {};
+	gpio@5000 {};
+};
+`);
+		const html = renderHtml(root);
+
+		assert.ok(html.includes('<span class="label">uart0:</span> <span class="node-name">serial@40002000</span> {'));
+		assert.ok(html.includes('<span class="node-name">gpio@5000</span> {'));
+		assert.ok(!html.includes('<span class="label">undefined:</span>'));
+	});
+
+	test('handles missing display labels while parsing and rendering', () => {
+		const root = merge(`
+/ {
+	serial@40002000 {
+		status = "okay";
+	};
+};
+`);
+		const serial = child(root, 'serial', '40002000');
+
+		assert.strictEqual(serial.label, undefined);
+		assert.doesNotThrow(() => renderHtml(root));
 	});
 
 	test('reports unresolved labels as warnings', () => {

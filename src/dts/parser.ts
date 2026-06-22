@@ -90,9 +90,11 @@ function parseTokens(tokens: Token[], file: string): DtNode {
   function parseNode(firstToken: Token, kind: DtNode["kind"] = "node"): DtNode {
     let name = firstToken.value;
     let unitAddress: string | undefined;
+    let label: string | undefined;
     const labels: string[] = [];
 
-    if (peek().value === ":") {
+    while (peek()?.value === ":" && peek(1)?.type === "identifier") {
+      label ??= name;
       labels.push(name);
       advance();
       name = advance().value;
@@ -105,6 +107,7 @@ function parseTokens(tokens: Token[], file: string): DtNode {
     const node: DtNode = {
       name,
       unitAddress,
+      label,
       labels,
       kind,
       properties: [],

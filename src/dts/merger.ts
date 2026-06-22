@@ -63,6 +63,10 @@ function createContext(root: DtNode): MergeContext {
 }
 
 function addLabels(node: DtNode, ctx: MergeContext) {
+  if (node.label) {
+    ctx.labels.set(node.label, node);
+  }
+
   for (const label of node.labels) {
     ctx.labels.set(label, node);
   }
@@ -96,6 +100,10 @@ function overwriteProperty(target: DtNode, property: DtProperty) {
 }
 
 export function mergeNode(target: DtNode, patch: DtNode, ctx: MergeContext) {
+  if (!target.label && patch.label) {
+    target.label = patch.label;
+  }
+
   for (const label of patch.labels) {
     if (!target.labels.includes(label)) {
       target.labels.push(label);

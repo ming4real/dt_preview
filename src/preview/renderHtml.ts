@@ -26,11 +26,12 @@ function renderNode(node: DtNode, depth = 0): string {
     node.name === "/"
       ? "/"
       : `${node.name}${node.unitAddress ? `@${node.unitAddress}` : ""}`;
+  const label = node.label ? `<span class="label">${escapeHtml(node.label)}:</span> ` : "";
 
   let html = `
 <div class="node" style="border-left-color:${color}">
-  ${indent}<span class="node-name">${escapeHtml(name)}</span>
-  <span class="source">${escapeHtml(file)}:${node.source.startLine}</span>
+  ${indent}${label}<span class="node-name">${escapeHtml(name)}</span> {
+  <span class="source" style="color:${color}">${escapeHtml(file)}:${node.source.startLine}</span>
 </div>
 `;
 
@@ -39,7 +40,7 @@ function renderNode(node: DtNode, depth = 0): string {
 <div class="prop" style="border-left-color:${colorForFile(prop.source.file)}">
   ${indent}&nbsp;&nbsp;<span class="prop-name">${escapeHtml(prop.name)}</span>
   <span>= ${escapeHtml(prop.value)}</span>
-  <span class="source">${escapeHtml(prop.source.file)}:${prop.source.startLine}</span>
+  <span class="source" style="color:${color}">${escapeHtml(prop.source.file)}:${prop.source.startLine}</span>
 </div>
 `;
   }
@@ -80,6 +81,10 @@ body {
 
 .node-name {
   font-weight: bold;
+}
+
+.label {
+  color: var(--vscode-symbolIcon-variableForeground);
 }
 
 .prop-name {
