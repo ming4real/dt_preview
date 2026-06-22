@@ -14,6 +14,14 @@ export type DtProperty = {
   name: string;
   value: string;
   source: SourceSpan;
+  deletedBy?: SourceSpan;
+};
+
+export type DtDeleteDirective = {
+  kind: "node" | "property";
+  target: string;
+  referenceLabel?: string;
+  source: SourceSpan;
 };
 
 export type DtNode = {
@@ -23,8 +31,10 @@ export type DtNode = {
   labels: string[];
   kind?: "node" | "root" | "reference";
   referenceLabel?: string;
+  deletedBy?: SourceSpan;
   properties: DtProperty[];
   children: DtNode[];
+  deleteDirectives: DtDeleteDirective[];
   source: SourceSpan;
   diagnostics?: DtDiagnostic[];
 };

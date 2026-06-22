@@ -17,10 +17,23 @@ function colorForFile(file: string): string {
   return `hsl(${Math.abs(hash) % 360}, 70%, 80%)`;
 }
 
-function renderNode(node: DtNode, depth = 0): string {
+function renderDeletionComment(file: string, line: number, depth: number): string {
+  const indent = "&nbsp;".repeat(depth * 4);
+
+  return `
+<div class="delete-comment">
+  ${indent}/* deleted by ${escapeHtml(file)}:${line} */
+</div>
+`;
+}
+
+function renderNode(node: DtNode, depth = 0, ancestorDeleted = false): string {
   const indent = "&nbsp;".repeat(depth * 4);
   const file = node.source.file;
   const color = colorForFile(file);
+  const isDeleted = ancestorDeleted || Boolean(node.deletedBy);
+  const lineColor = isDeleted ? "var(--vscode-disabledForeground)" : color;
+  const deletedClass = isDeleted ? " deleted" : "";
 
   const name =
     node.name === "/"
@@ -28,25 +41,37 @@ function renderNode(node: DtNode, depth = 0): string {
       : `${node.name}${node.unitAddress ? `@${node.unitAddress}` : ""}`;
   const label = node.label ? `<span class="label">${escapeHtml(node.label)}:</span> ` : "";
 
-  let html = `
-<div class="node" style="border-left-color:${color}">
+  let html = node.deletedBy
+    ? renderDeletionComment(node.deletedBy.file, node.deletedBy.startLine, depth)
+    : "";
+
+  html += `
+<div class="node${deletedClass}" style="border-left-color:${lineColor}">
   ${indent}${label}<span class="node-name">${escapeHtml(name)}</span> {
-  <span class="source" style="color:${color}">${escapeHtml(file)}:${node.source.startLine}</span>
+  <span class="source" style="color:${lineColor}">${escapeHtml(file)}:${node.source.startLine}</span>
 </div>
 `;
 
   for (const prop of node.properties) {
+    const propDeleted = isDeleted || Boolean(prop.deletedBy);
+    const propColor = propDeleted ? "var(--vscode-disabledForeground)" : colorForFile(prop.source.file);
+    const propDeletedClass = propDeleted ? " deleted" : "";
+
+    if (prop.deletedBy) {
+      html += renderDeletionComment(prop.deletedBy.file, prop.deletedBy.startLine, depth + 1);
+    }
+
     html += `
-<div class="prop" style="border-left-color:${colorForFile(prop.source.file)}">
+<div class="prop${propDeletedClass}" style="border-left-color:${propColor}">
   ${indent}&nbsp;&nbsp;<span class="prop-name">${escapeHtml(prop.name)}</span>
   <span>= ${escapeHtml(prop.value)}</span>
-  <span class="source" style="color:${color}">${escapeHtml(prop.source.file)}:${prop.source.startLine}</span>
+  <span class="source" style="color:${propColor}">${escapeHtml(prop.source.file)}:${prop.source.startLine}</span>
 </div>
 `;
   }
 
   for (const child of node.children) {
-    html += renderNode(child, depth + 1);
+    html += renderNode(child, depth + 1, isDeleted);
   }
 
   return html;
@@ -95,6 +120,21 @@ body {
   opacity: 0.65;
   margin-left: 12px;
   font-size: 0.85em;
+}
+
+.deleted {
+  color: var(--vscode-disabledForeground);
+  text-decoration: line-through;
+}
+
+.deleted .source {
+  color: var(--vscode-disabledForeground);
+}
+
+.delete-comment {
+  color: var(--vscode-disabledForeground);
+  padding: 2px 8px;
+  white-space: nowrap;
 }
 
 .diagnostic {

@@ -1,4 +1,4 @@
-import { DtDiagnostic, DtNode, DtProperty } from "./types";
+import { DtDeleteDirective, DtDiagnostic, DtNode, DtProperty, SourceSpan } from "./types";
 
 export interface MergeContext {
   root: DtNode;
@@ -16,15 +16,25 @@ function cloneProperty(property: DtProperty): DtProperty {
   return {
     ...property,
     source: { ...property.source },
+    deletedBy: property.deletedBy ? { ...property.deletedBy } : undefined,
   };
+}
+
+function cloneSource(source: SourceSpan): SourceSpan {
+  return { ...source };
 }
 
 function cloneNode(node: DtNode): DtNode {
   return {
     ...node,
     labels: [...node.labels],
+    deletedBy: node.deletedBy ? cloneSource(node.deletedBy) : undefined,
     properties: node.properties.map(cloneProperty),
     children: node.children.map(cloneNode),
+    deleteDirectives: node.deleteDirectives.map(directive => ({
+      ...directive,
+      source: cloneSource(directive.source),
+    })),
     source: { ...node.source },
     diagnostics: node.diagnostics ? [...node.diagnostics] : undefined,
   };
@@ -45,6 +55,10 @@ function createContext(root: DtNode): MergeContext {
     labels: [...root.labels],
     properties: [],
     children: [],
+    deleteDirectives: root.deleteDirectives.map(directive => ({
+      ...directive,
+      source: cloneSource(directive.source),
+    })),
     source: { ...root.source },
     diagnostics: root.diagnostics ? [...root.diagnostics] : [],
   };
@@ -69,6 +83,14 @@ function addLabels(node: DtNode, ctx: MergeContext) {
 
   for (const label of node.labels) {
     ctx.labels.set(label, node);
+  }
+}
+
+function addLabelsRecursive(node: DtNode, ctx: MergeContext) {
+  addLabels(node, ctx);
+
+  for (const child of node.children) {
+    addLabelsRecursive(child, ctx);
   }
 }
 
@@ -99,6 +121,55 @@ function overwriteProperty(target: DtNode, property: DtProperty) {
   }
 }
 
+function markDeleted(source: SourceSpan, target: { deletedBy?: SourceSpan }) {
+  target.deletedBy ??= cloneSource(source);
+}
+
+function applyDeleteDirective(target: DtNode, directive: DtDeleteDirective, ctx: MergeContext) {
+  if (directive.kind === "property") {
+    const property = target.properties.find(item => item.name === directive.target);
+
+    if (!property) {
+      addWarning(ctx, `Delete target not found: ${directive.target}`, target);
+      return;
+    }
+
+    markDeleted(directive.source, property);
+    return;
+  }
+
+  if (directive.referenceLabel) {
+    const node = ctx.labels.get(directive.referenceLabel);
+
+    if (!node) {
+      addWarning(ctx, `Delete target not found: ${directive.target}`, target);
+      return;
+    }
+
+    markDeleted(directive.source, node);
+    return;
+  }
+
+  const child = target.children.find(item => nodeKey(item) === directive.target || item.name === directive.target);
+
+  if (!child) {
+    addWarning(ctx, `Delete target not found: ${directive.target}`, target);
+    return;
+  }
+
+  markDeleted(directive.source, child);
+}
+
+function applyDeleteDirectivesInSubtree(node: DtNode, ctx: MergeContext) {
+  for (const directive of node.deleteDirectives) {
+    applyDeleteDirective(node, directive, ctx);
+  }
+
+  for (const child of node.children) {
+    applyDeleteDirectivesInSubtree(child, ctx);
+  }
+}
+
 export function mergeNode(target: DtNode, patch: DtNode, ctx: MergeContext) {
   if (!target.label && patch.label) {
     target.label = patch.label;
@@ -119,13 +190,24 @@ export function mergeNode(target: DtNode, patch: DtNode, ctx: MergeContext) {
     const existing = target.children.find(child => nodeKey(child) === key);
 
     if (existing) {
+      if (existing.deletedBy && !childPatch.deletedBy) {
+        existing.deletedBy = undefined;
+      }
+
       mergeNode(existing, childPatch, ctx);
     } else {
-      target.children.push(cloneNode(childPatch));
+      const cloned = cloneNode(childPatch);
+      target.children.push(cloned);
+      addLabelsRecursive(cloned, ctx);
+      applyDeleteDirectivesInSubtree(cloned, ctx);
     }
   }
 
   addLabels(target, ctx);
+
+  for (const directive of patch.deleteDirectives) {
+    applyDeleteDirective(target, directive, ctx);
+  }
 }
 
 function mergeChildIntoRoot(child: DtNode, ctx: MergeContext) {
@@ -134,7 +216,10 @@ function mergeChildIntoRoot(child: DtNode, ctx: MergeContext) {
   if (existing) {
     mergeNode(existing, child, ctx);
   } else {
-    ctx.root.children.push(cloneNode(child));
+    const cloned = cloneNode(child);
+    ctx.root.children.push(cloned);
+    addLabelsRecursive(cloned, ctx);
+    applyDeleteDirectivesInSubtree(cloned, ctx);
   }
 }
 
@@ -241,6 +326,10 @@ export function mergeTrees(root: DtNode): DtNode {
 
   for (const item of root.children) {
     applyTopLevelItem(item, ctx);
+  }
+
+  for (const directive of root.deleteDirectives) {
+    applyDeleteDirective(ctx.root, directive, ctx);
   }
 
   applyOverlayFragments(ctx);

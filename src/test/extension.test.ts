@@ -278,6 +278,134 @@ fragment@1 {
 		assert.doesNotThrow(() => renderHtml(root));
 	});
 
+	test('renders deleted properties as greyed out with deletion comments', () => {
+		const root = merge(`
+/ {
+	node {
+		status = "okay";
+		/delete-property/ status;
+	};
+};
+`);
+		const node = child(root, 'node');
+		const status = node.properties.find(item => item.name === 'status');
+		const html = renderHtml(root);
+
+		assert.strictEqual(status?.deletedBy?.file, '/test.dts');
+		assert.strictEqual(status?.deletedBy?.startLine, 5);
+		assert.ok(html.includes('/* deleted by /test.dts:5 */'));
+		assert.ok(html.includes('<div class="prop deleted"'));
+		assert.ok(html.includes('<span class="prop-name">status</span>'));
+	});
+
+	test('renders deleted child nodes as greyed out', () => {
+		const root = merge(`
+/ {
+	parent {
+		old_node {
+			status = "disabled";
+		};
+		/delete-node/ old_node;
+	};
+};
+`);
+		const oldNode = child(child(root, 'parent'), 'old_node');
+		const html = renderHtml(root);
+
+		assert.strictEqual(oldNode.deletedBy?.startLine, 7);
+		assert.ok(html.includes('/* deleted by /test.dts:7 */'));
+		assert.ok(html.includes('<div class="node deleted"'));
+		assert.ok(html.includes('<span class="node-name">old_node</span> {'));
+		assert.ok(html.includes('<div class="prop deleted"'));
+	});
+
+	test('renders nodes deleted by label as greyed out', () => {
+		const root = merge(`
+/ {
+	old_label: old_node {
+		status = "disabled";
+	};
+};
+/delete-node/ &old_label;
+`);
+		const oldNode = child(root, 'old_node');
+		const html = renderHtml(root);
+
+		assert.strictEqual(oldNode.deletedBy?.startLine, 7);
+		assert.ok(html.includes('/* deleted by /test.dts:7 */'));
+		assert.ok(html.includes('<span class="label">old_label:</span> <span class="node-name">old_node</span> {'));
+		assert.ok(html.includes('<div class="node deleted"'));
+	});
+
+	test('deletion comments include source file and line number', () => {
+		const root = merge(`
+/ {
+	node {
+		status = "okay";
+		/delete-property/ status;
+		/delete-property/ status;
+	};
+};
+`);
+		const status = child(root, 'node').properties.find(item => item.name === 'status');
+		const html = renderHtml(root);
+
+		assert.strictEqual(status?.deletedBy?.file, '/test.dts');
+		assert.strictEqual(status?.deletedBy?.startLine, 5);
+		assert.ok(html.includes('/* deleted by /test.dts:5 */'));
+		assert.ok(!html.includes('/* deleted by /test.dts:6 */'));
+	});
+
+	test('deletion from an overlay marks included base content as deleted', () => {
+		withFiles({
+			'main.dts': [
+				'#include "base.dtsi"',
+				'/ {',
+				'	node {',
+				'		/delete-property/ status;',
+				'	};',
+				'};',
+			].join('\n'),
+			'base.dtsi': [
+				'/ {',
+				'	node {',
+				'		status = "okay";',
+				'	};',
+				'};',
+			].join('\n'),
+		}, dir => {
+			const root = mergeFile(path.join(dir, 'main.dts'));
+			const status = child(root, 'node').properties.find(item => item.name === 'status');
+			const html = renderHtml(root);
+			const mainFile = path.join(dir, 'main.dts');
+			const baseFile = path.join(dir, 'base.dtsi');
+
+			assert.strictEqual(status?.source.file, baseFile);
+			assert.strictEqual(status?.deletedBy?.file, mainFile);
+			assert.strictEqual(status?.deletedBy?.startLine, 4);
+			assert.ok(html.includes(`/* deleted by ${mainFile}:4 */`));
+			assert.ok(html.includes(`${baseFile}:3`));
+			assert.ok(html.includes('<div class="prop deleted"'));
+		});
+	});
+
+	test('missing delete targets only warn', () => {
+		const root = merge(`
+/ {
+	node {
+		/delete-property/ missing-property;
+		/delete-node/ missing-node;
+	};
+};
+/delete-node/ &missing_label;
+`);
+
+		assert.ok(root.diagnostics?.some(item => item.message === 'Delete target not found: missing-property'));
+		assert.ok(root.diagnostics?.some(item => item.message === 'Delete target not found: missing-node'));
+		assert.ok(root.diagnostics?.some(item => item.message === 'Delete target not found: &missing_label'));
+		assert.doesNotThrow(() => renderHtml(root));
+	});
+
 	test('reports unresolved labels as warnings', () => {
 		const root = merge(`
 &missing {

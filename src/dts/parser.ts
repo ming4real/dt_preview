@@ -1,6 +1,6 @@
 import { lexDts, Token } from "./lexer";
 import { SourceChunk } from "./includeResolver";
-import { DtNode, DtProperty, SourceSpan } from "./types";
+import { DtDeleteDirective, DtNode, DtProperty, SourceSpan } from "./types";
 
 export function parseDtsChunks(chunks: SourceChunk[], rootFile: string): DtNode {
   const tokens = chunks
@@ -87,6 +87,40 @@ function parseTokens(tokens: Token[], file: string): DtNode {
     };
   }
 
+  function isDeleteDirectiveStart(token: Token): boolean {
+    return token.value === "/"
+      && (peek()?.value === "delete-property" || peek()?.value === "delete-node")
+      && peek(1)?.value === "/";
+  }
+
+  function parseDeleteDirective(startToken: Token): DtDeleteDirective {
+    const directive = advance().value;
+    const kind: DtDeleteDirective["kind"] = directive === "delete-property" ? "property" : "node";
+    match("/");
+
+    let referenceLabel: string | undefined;
+    const targetParts: string[] = [];
+
+    if (kind === "node" && match("&")) {
+      const labelToken = advance();
+      referenceLabel = labelToken.value;
+      targetParts.push(`&${labelToken.value}`);
+    } else {
+      while (peek() && peek().type !== "eof" && peek().value !== ";") {
+        targetParts.push(advance().value);
+      }
+    }
+
+    match(";");
+
+    return {
+      kind,
+      target: targetParts.join(""),
+      referenceLabel,
+      source: spanFrom(startToken),
+    };
+  }
+
   function parseNode(firstToken: Token, kind: DtNode["kind"] = "node"): DtNode {
     let name = firstToken.value;
     let unitAddress: string | undefined;
@@ -112,6 +146,7 @@ function parseTokens(tokens: Token[], file: string): DtNode {
       kind,
       properties: [],
       children: [],
+      deleteDirectives: [],
       source: spanFrom(firstToken),
     };
 
@@ -121,6 +156,11 @@ function parseTokens(tokens: Token[], file: string): DtNode {
 
     while (peek() && peek().type !== "eof" && peek().value !== "}") {
       const current = advance();
+
+      if (isDeleteDirectiveStart(current)) {
+        node.deleteDirectives.push(parseDeleteDirective(current));
+        continue;
+      }
 
       if (current.type !== "identifier" && current.value !== "/") {
         continue;
@@ -152,6 +192,7 @@ function parseTokens(tokens: Token[], file: string): DtNode {
       referenceLabel: labelToken.value,
       properties: [],
       children: [],
+      deleteDirectives: [],
       source: spanFrom(ampersand),
     };
 
@@ -161,6 +202,11 @@ function parseTokens(tokens: Token[], file: string): DtNode {
 
     while (peek() && peek().type !== "eof" && peek().value !== "}") {
       const current = advance();
+
+      if (isDeleteDirectiveStart(current)) {
+        node.deleteDirectives.push(parseDeleteDirective(current));
+        continue;
+      }
 
       if (current.type !== "identifier" && current.value !== "/") {
         continue;
@@ -188,6 +234,7 @@ function parseTokens(tokens: Token[], file: string): DtNode {
     labels: [],
     properties: [],
     children: [],
+    deleteDirectives: [],
     source: {
       file,
       startLine: 1,
@@ -198,7 +245,9 @@ function parseTokens(tokens: Token[], file: string): DtNode {
   while (peek() && peek().type !== "eof") {
     const token = advance();
 
-    if (token.value === "/" && peek()?.value === "{") {
+    if (isDeleteDirectiveStart(token)) {
+      root.deleteDirectives.push(parseDeleteDirective(token));
+    } else if (token.value === "/" && peek()?.value === "{") {
       root.children.push(parseNode(token, "root"));
     } else if (token.value === "&" && peek()?.type === "identifier") {
       root.children.push(parseReferencePatch(token));
