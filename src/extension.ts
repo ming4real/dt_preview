@@ -17,7 +17,7 @@ export function activate(context: vscode.ExtensionContext) {
     const file = event.document.uri.fsPath;
 
     if (file.endsWith(".dts") || file.endsWith(".dtsi")) {
-      DeviceTreePreviewPanel.update(file);
+      DeviceTreePreviewPanel.handleDocumentChange(file);
     }
   });
 

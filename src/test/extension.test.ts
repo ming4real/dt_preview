@@ -7,7 +7,7 @@ import * as path from 'path';
 // as well as import your extension to test it
 import * as vscode from 'vscode';
 // import * as myExtension from '../../extension';
-import { resolveIncludesWithDiagnostics } from '../dts/includeResolver';
+import { collectTransitiveIncludes, isIncludedByRoot, resolveIncludesWithDiagnostics } from '../dts/includeResolver';
 import { parseDts, parseDtsChunks } from '../dts/parser';
 import { mergeTrees } from '../dts/merger';
 import { DtNode } from '../dts/types';
@@ -45,6 +45,14 @@ function withFiles(files: Record<string, string>, run: (dir: string) => void) {
 
 function mergeFile(entryFile: string): DtNode {
 	const { chunks, diagnostics } = resolveIncludesWithDiagnostics(entryFile);
+	const parsed = parseDtsChunks(chunks, entryFile);
+	parsed.diagnostics = diagnostics;
+
+	return mergeTrees(parsed);
+}
+
+function mergeFileWithReader(entryFile: string, readFile: (file: string) => string): DtNode {
+	const { chunks, diagnostics } = resolveIncludesWithDiagnostics(entryFile, readFile);
 	const parsed = parseDtsChunks(chunks, entryFile);
 	parsed.diagnostics = diagnostics;
 
@@ -487,6 +495,61 @@ fragment@1 {
 			child(root, 'b-node');
 			child(root, 'main-node');
 			assert.ok(root.diagnostics?.some(item => item.message === `Included file not found: ${missingPath}`));
+		});
+	});
+
+	test('tracks direct and indirect include dependencies for a root DTS', () => {
+		withFiles({
+			'main.dts': '#include "base.dtsi"\n/ { main-node {}; };\n',
+			'base.dtsi': '#include "nested/child.dtsi"\n/ { base-node {}; };\n',
+			'nested/child.dtsi': '/ { child-node {}; };\n',
+			'unused.dtsi': '/ { unused-node {}; };\n',
+		}, dir => {
+			const mainFile = path.join(dir, 'main.dts');
+			const baseFile = path.join(dir, 'base.dtsi');
+			const childFile = path.join(dir, 'nested', 'child.dtsi');
+			const unusedFile = path.join(dir, 'unused.dtsi');
+			const { dependencyGraph } = resolveIncludesWithDiagnostics(mainFile);
+			const includes = collectTransitiveIncludes(mainFile, dependencyGraph);
+
+			assert.ok(includes.has(baseFile));
+			assert.ok(includes.has(childFile));
+			assert.ok(isIncludedByRoot(mainFile, baseFile, dependencyGraph));
+			assert.ok(isIncludedByRoot(mainFile, childFile, dependencyGraph));
+			assert.ok(!isIncludedByRoot(mainFile, unusedFile, dependencyGraph));
+		});
+	});
+
+	test('rebuilding from the root DTS uses edited include content with root overlays', () => {
+		withFiles({
+			'main.dts': [
+				'#include "base.dtsi"',
+				'&uart0 {',
+				'	current-speed = <115200>;',
+				'};',
+			].join('\n'),
+			'base.dtsi': [
+				'/ {',
+				'	uart0: serial@1000 {',
+				'		status = "disabled";',
+				'	};',
+				'};',
+			].join('\n'),
+		}, dir => {
+			const mainFile = path.join(dir, 'main.dts');
+			const baseFile = path.join(dir, 'base.dtsi');
+			const editedBase = [
+				'/ {',
+				'	uart0: serial@1000 {',
+				'		status = "okay";',
+				'	};',
+				'};',
+			].join('\n');
+			const root = mergeFileWithReader(mainFile, file => file === baseFile ? editedBase : fs.readFileSync(file, 'utf8'));
+			const serial = child(root, 'serial', '1000');
+
+			assert.strictEqual(prop(serial, 'status'), '"okay"');
+			assert.strictEqual(prop(serial, 'current-speed'), '< 115200 >');
 		});
 	});
 });
