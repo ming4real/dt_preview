@@ -15,7 +15,8 @@ export class DeviceTreePreviewPanel {
 
   private static ensurePanel(extensionUri: vscode.Uri) {
     if (!this.panel) {
-      const monacoRoot = vscode.Uri.joinPath(extensionUri, "node_modules", "monaco-editor", "min");
+      const nodeModulesRoot = vscode.Uri.joinPath(extensionUri, "node_modules");
+      const mediaRoot = vscode.Uri.joinPath(extensionUri, "media");
 
       this.panel = vscode.window.createWebviewPanel(
         "deviceTreePreview",
@@ -24,7 +25,7 @@ export class DeviceTreePreviewPanel {
         {
           enableScripts: true,
           retainContextWhenHidden: true,
-          localResourceRoots: [monacoRoot],
+          localResourceRoots: [nodeModulesRoot, mediaRoot],
         }
       );
 

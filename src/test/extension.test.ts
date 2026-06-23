@@ -294,6 +294,9 @@ fragment@1 {
 		});
 
 		assert.ok(html.includes('Content-Security-Policy'));
+		assert.ok(html.includes('img-src vscode-webview://example data:'));
+		assert.ok(html.includes('font-src vscode-webview://example data:'));
+		assert.ok(html.includes("style-src vscode-webview://example 'unsafe-inline'"));
 		assert.ok(html.includes("script-src vscode-webview://example 'nonce-testnonce'"));
 		assert.ok(html.includes('src="vscode-webview://example/node_modules/monaco-editor/min/vs/loader.js"'));
 		assert.ok(html.includes("require(['vs/editor/editor.main']"));
