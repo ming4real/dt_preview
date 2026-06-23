@@ -11,7 +11,7 @@ import { collectTransitiveIncludes, isIncludedByRoot, resolveIncludesWithDiagnos
 import { parseDts, parseDtsChunks } from '../dts/parser';
 import { mergeTrees } from '../dts/merger';
 import { DtNode } from '../dts/types';
-import { renderHtml } from '../preview/renderHtml';
+import { renderHtml, renderPreviewModel } from '../preview/renderHtml';
 
 function merge(text: string): DtNode {
 	return mergeTrees(parseDts(text, '/test.dts'));
@@ -236,7 +236,8 @@ fragment@1 {
 		assert.strictEqual(serial.label, 'uart0');
 		assert.strictEqual(prop(serial, 'status'), '"okay"');
 		assert.strictEqual(prop(serial, 'current-speed'), '< 115200 >');
-		assert.ok(html.includes('<span class="label">uart0:</span> <span class="node-name">serial@40002000</span> {'));
+		assert.ok(html.includes('vs/editor/editor.main'));
+		assert.ok(renderPreviewModel(root).text.includes('uart0: serial@40002000 {'));
 	});
 
 	test('does not overwrite an existing target display label during merge', () => {
@@ -266,10 +267,12 @@ fragment@1 {
 };
 `);
 		const html = renderHtml(root);
+		const model = renderPreviewModel(root);
 
-		assert.ok(html.includes('<span class="label">uart0:</span> <span class="node-name">serial@40002000</span> {'));
-		assert.ok(html.includes('<span class="node-name">gpio@5000</span> {'));
-		assert.ok(!html.includes('<span class="label">undefined:</span>'));
+		assert.ok(html.includes('vs/editor/editor.main'));
+		assert.ok(model.text.includes('uart0: serial@40002000 {'));
+		assert.ok(model.text.includes('gpio@5000 {'));
+		assert.ok(!model.text.includes('undefined:'));
 	});
 
 	test('renders the selected preview root at the top', () => {
@@ -279,6 +282,28 @@ fragment@1 {
 		assert.ok(html.includes('<span class="preview-root-label">Preview Root:</span>'));
 		assert.ok(html.includes('<span>board-a.dts</span>'));
 		assert.ok(html.includes('title="/boards/board-a.dts"'));
+	});
+
+	test('renders Monaco preview shell with local loader and CSP', () => {
+		const root = merge('/ { node {}; };');
+		const html = renderHtml(root, {
+			cspSource: 'vscode-webview://example',
+			monacoBaseUri: 'vscode-webview://example/node_modules/monaco-editor/min/vs',
+			nonce: 'testnonce',
+			rootFile: '/boards/board-a.dts',
+		});
+
+		assert.ok(html.includes('Content-Security-Policy'));
+		assert.ok(html.includes("script-src vscode-webview://example 'nonce-testnonce'"));
+		assert.ok(html.includes('src="vscode-webview://example/node_modules/monaco-editor/min/vs/loader.js"'));
+		assert.ok(html.includes("require(['vs/editor/editor.main']"));
+		assert.ok(html.includes('readOnly: true'));
+		assert.ok(html.includes('.dtbe-deleted-block'));
+		assert.ok(html.includes('.dtbe-deleted-inline'));
+		assert.ok(html.includes('font-style: italic'));
+		assert.ok(html.includes('color: var(--vscode-descriptionForeground) !important'));
+		assert.ok(html.includes("'@comment'"));
+		assert.ok(html.includes("comment: ["));
 	});
 
 	test('handles missing display labels while parsing and rendering', () => {
@@ -295,7 +320,7 @@ fragment@1 {
 		assert.doesNotThrow(() => renderHtml(root));
 	});
 
-	test('renders deleted properties as greyed out with deletion comments', () => {
+	test('renders deleted properties as commented-out DTS with deletion comments', () => {
 		const root = merge(`
 / {
 	node {
@@ -306,16 +331,26 @@ fragment@1 {
 `);
 		const node = child(root, 'node');
 		const status = node.properties.find(item => item.name === 'status');
-		const html = renderHtml(root);
+		const model = renderPreviewModel(root);
 
 		assert.strictEqual(status?.deletedBy?.file, '/test.dts');
 		assert.strictEqual(status?.deletedBy?.startLine, 5);
-		assert.ok(html.includes('/* deleted by /test.dts:5 */'));
-		assert.ok(html.includes('<div class="prop deleted"'));
-		assert.ok(html.includes('<span class="prop-name">status</span>'));
+		assert.ok(model.text.includes('/* Deleted by /test.dts:5'));
+		assert.ok(model.text.includes('status = "okay";'));
+		assert.match(model.text, /\/\* Deleted by \/test\.dts:5\n\s+status = "okay";\n\s+\*\//);
+		const deletedBlock = model.decorations.find(item => item.options.className === 'dtbe-deleted-block');
+		assert.ok(deletedBlock);
+		assert.strictEqual(deletedBlock.options.inlineClassName, 'dtbe-deleted-inline');
+		assert.deepStrictEqual(model.deletedRanges.map(range => range.kind), ['deleted-property']);
+		assert.strictEqual(model.deletedRanges[0].deleteSource.file, '/test.dts');
+		assert.ok(!model.decorations.some(item =>
+			item.options.linesDecorationsClassName?.startsWith('dt-source')
+			&& item.range.startLineNumber >= deletedBlock.range.startLineNumber
+			&& item.range.startLineNumber <= deletedBlock.range.endLineNumber
+		));
 	});
 
-	test('renders deleted child nodes as greyed out', () => {
+	test('renders deleted child nodes as commented-out DTS', () => {
 		const root = merge(`
 / {
 	parent {
@@ -327,16 +362,18 @@ fragment@1 {
 };
 `);
 		const oldNode = child(child(root, 'parent'), 'old_node');
-		const html = renderHtml(root);
+		const model = renderPreviewModel(root);
 
 		assert.strictEqual(oldNode.deletedBy?.startLine, 7);
-		assert.ok(html.includes('/* deleted by /test.dts:7 */'));
-		assert.ok(html.includes('<div class="node deleted"'));
-		assert.ok(html.includes('<span class="node-name">old_node</span> {'));
-		assert.ok(html.includes('<div class="prop deleted"'));
+		assert.ok(model.text.includes('/* Deleted by /test.dts:7'));
+		assert.ok(model.text.includes('old_node {'));
+		assert.ok(model.text.includes('status = "disabled";'));
+		assert.match(model.text, /\/\* Deleted by \/test\.dts:7\n\s+old_node \{\n\s+status = "disabled";\n\s+\};\n\s+\*\//);
+		assert.strictEqual(model.decorations.filter(item => item.options.className === 'dtbe-deleted-block').length, 1);
+		assert.deepStrictEqual(model.deletedRanges.map(range => range.kind), ['deleted-node']);
 	});
 
-	test('renders nodes deleted by label as greyed out', () => {
+	test('renders nodes deleted by label as commented-out DTS', () => {
 		const root = merge(`
 / {
 	old_label: old_node {
@@ -346,12 +383,12 @@ fragment@1 {
 /delete-node/ &old_label;
 `);
 		const oldNode = child(root, 'old_node');
-		const html = renderHtml(root);
+		const model = renderPreviewModel(root);
 
 		assert.strictEqual(oldNode.deletedBy?.startLine, 7);
-		assert.ok(html.includes('/* deleted by /test.dts:7 */'));
-		assert.ok(html.includes('<span class="label">old_label:</span> <span class="node-name">old_node</span> {'));
-		assert.ok(html.includes('<div class="node deleted"'));
+		assert.ok(model.text.includes('/* Deleted by /test.dts:7'));
+		assert.ok(model.text.includes('old_label: old_node {'));
+		assert.ok(model.decorations.some(item => item.options.className === 'dtbe-deleted-block'));
 	});
 
 	test('deletion comments include source file and line number', () => {
@@ -365,12 +402,12 @@ fragment@1 {
 };
 `);
 		const status = child(root, 'node').properties.find(item => item.name === 'status');
-		const html = renderHtml(root);
+		const model = renderPreviewModel(root);
 
 		assert.strictEqual(status?.deletedBy?.file, '/test.dts');
 		assert.strictEqual(status?.deletedBy?.startLine, 5);
-		assert.ok(html.includes('/* deleted by /test.dts:5 */'));
-		assert.ok(!html.includes('/* deleted by /test.dts:6 */'));
+		assert.ok(model.text.includes('/* Deleted by /test.dts:5'));
+		assert.ok(!model.text.includes('/* Deleted by /test.dts:6'));
 	});
 
 	test('deletion from an overlay marks included base content as deleted', () => {
@@ -393,16 +430,16 @@ fragment@1 {
 		}, dir => {
 			const root = mergeFile(path.join(dir, 'main.dts'));
 			const status = child(root, 'node').properties.find(item => item.name === 'status');
-			const html = renderHtml(root);
+			const model = renderPreviewModel(root);
 			const mainFile = path.join(dir, 'main.dts');
 			const baseFile = path.join(dir, 'base.dtsi');
 
 			assert.strictEqual(status?.source.file, baseFile);
 			assert.strictEqual(status?.deletedBy?.file, mainFile);
 			assert.strictEqual(status?.deletedBy?.startLine, 4);
-			assert.ok(html.includes(`/* deleted by ${mainFile}:4 */`));
-			assert.ok(html.includes(`${baseFile}:3`));
-			assert.ok(html.includes('<div class="prop deleted"'));
+			assert.ok(model.text.includes(`/* Deleted by ${mainFile}:4`));
+			assert.ok(model.fileColors.has(baseFile));
+			assert.ok(model.decorations.some(item => item.options.className === 'dtbe-deleted-block'));
 		});
 	});
 

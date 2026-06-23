@@ -13,8 +13,10 @@ export class DeviceTreePreviewPanel {
   private static dependencyGraph = new Map<string, Set<string>>();
   private static dependencyClosure = new Set<string>();
 
-  private static ensurePanel() {
+  private static ensurePanel(extensionUri: vscode.Uri) {
     if (!this.panel) {
+      const monacoRoot = vscode.Uri.joinPath(extensionUri, "node_modules", "monaco-editor", "min");
+
       this.panel = vscode.window.createWebviewPanel(
         "deviceTreePreview",
         "Device Tree Preview",
@@ -22,6 +24,7 @@ export class DeviceTreePreviewPanel {
         {
           enableScripts: true,
           retainContextWhenHidden: true,
+          localResourceRoots: [monacoRoot],
         }
       );
 
@@ -34,14 +37,17 @@ export class DeviceTreePreviewPanel {
     }
   }
 
-  static show() {
-    this.ensurePanel();
+  static show(extensionUri: vscode.Uri) {
+    this.ensurePanel(extensionUri);
 
     if (this.activeRootDts) {
-      this.update(this.activeRootDts, this.activeRootDts, "manual refresh");
+      this.update(this.activeRootDts, extensionUri, this.activeRootDts, "manual refresh");
       return;
     }
 
+    const monacoBaseUri = this.panel!.webview.asWebviewUri(
+      vscode.Uri.joinPath(extensionUri, "node_modules", "monaco-editor", "min", "vs")
+    );
     this.panel!.webview.html = renderHtml({
       name: "/",
       labels: [],
@@ -57,10 +63,14 @@ export class DeviceTreePreviewPanel {
         severity: "warning",
         message: "No preview root selected. Run Device Tree: Preview This DTS as Root.",
       }],
+    }, {
+      cspSource: this.panel!.webview.cspSource,
+      monacoBaseUri: monacoBaseUri.toString(),
+      nonce: this.createNonce(),
     });
   }
 
-  static previewThisDtsAsRoot(sourceFile: string): boolean {
+  static previewThisDtsAsRoot(sourceFile: string, extensionUri: vscode.Uri): boolean {
     const rootFile = path.resolve(sourceFile);
 
     if (path.extname(rootFile) !== ".dts") {
@@ -74,7 +84,7 @@ export class DeviceTreePreviewPanel {
       return false;
     }
 
-    this.ensurePanel();
+    this.ensurePanel(extensionUri);
     this.activeRootDts = rootFile;
     this.log({
       rootFile,
@@ -82,13 +92,13 @@ export class DeviceTreePreviewPanel {
       trigger: "root selection",
       durationMs: 0,
     });
-    this.update(rootFile, rootFile, "root selection");
+    this.update(rootFile, extensionUri, rootFile, "root selection");
 
     return true;
   }
 
-  static update(sourceFile: string, changedFile = sourceFile, trigger = "manual rebuild") {
-    this.ensurePanel();
+  static update(sourceFile: string, extensionUri: vscode.Uri, changedFile = sourceFile, trigger = "manual rebuild") {
+    this.ensurePanel(extensionUri);
 
     try {
       const rootFile = path.resolve(sourceFile);
@@ -101,7 +111,15 @@ export class DeviceTreePreviewPanel {
       this.dependencyGraph = dependencyGraph;
       this.dependencyClosure = collectTransitiveIncludes(rootFile, dependencyGraph);
       this.activeRootDts = rootFile;
-      this.panel!.webview.html = renderHtml(merged, rootFile);
+      const monacoBaseUri = this.panel!.webview.asWebviewUri(
+        vscode.Uri.joinPath(extensionUri, "node_modules", "monaco-editor", "min", "vs")
+      );
+      this.panel!.webview.html = renderHtml(merged, {
+        cspSource: this.panel!.webview.cspSource,
+        monacoBaseUri: monacoBaseUri.toString(),
+        nonce: this.createNonce(),
+        rootFile,
+      });
       this.log({
         rootFile,
         changedFile: path.resolve(changedFile),
@@ -113,7 +131,7 @@ export class DeviceTreePreviewPanel {
     }
   }
 
-  static handleDocumentChange(changedFile: string) {
+  static handleDocumentChange(changedFile: string, extensionUri: vscode.Uri) {
     const rootFile = this.activeRootDts;
     const resolvedChangedFile = path.resolve(changedFile);
 
@@ -126,7 +144,7 @@ export class DeviceTreePreviewPanel {
 
     if (shouldRebuild) {
       const trigger = resolvedChangedFile === rootFile ? "root change" : "dependency change";
-      this.update(rootFile, resolvedChangedFile, trigger);
+      this.update(rootFile, extensionUri, resolvedChangedFile, trigger);
       return;
     }
 
@@ -157,5 +175,16 @@ export class DeviceTreePreviewPanel {
     this.output.appendLine(`Changed: ${entry.changedFile}`);
     this.output.appendLine(`Trigger: ${entry.trigger}`);
     this.output.appendLine(`Rebuild: ${entry.durationMs} ms`);
+  }
+
+  private static createNonce(): string {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let nonce = "";
+
+    for (let i = 0; i < 32; i++) {
+      nonce += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    return nonce;
   }
 }

@@ -10,11 +10,11 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    DeviceTreePreviewPanel.previewThisDtsAsRoot(editor.document.uri.fsPath);
+    DeviceTreePreviewPanel.previewThisDtsAsRoot(editor.document.uri.fsPath, context.extensionUri);
   }
 
   const openPreview = vscode.commands.registerCommand("dtbEditor.openPreview", () => {
-    DeviceTreePreviewPanel.show();
+    DeviceTreePreviewPanel.show(context.extensionUri);
   });
 
   const previewRoot = vscode.commands.registerCommand("dtbEditor.previewThisDtsAsRoot", previewActiveEditorAsRoot);
@@ -24,7 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
     const file = event.document.uri.fsPath;
 
     if (file.endsWith(".dts") || file.endsWith(".dtsi")) {
-      DeviceTreePreviewPanel.handleDocumentChange(file);
+      DeviceTreePreviewPanel.handleDocumentChange(file, context.extensionUri);
     }
   });
 
