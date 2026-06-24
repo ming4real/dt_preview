@@ -338,6 +338,48 @@ fragment@1 {
 		assert.ok(html.includes("comment: ["));
 	});
 
+	test('renders source gutter colours without filename text', () => {
+		const root: DtNode = {
+			name: '/',
+			labels: [],
+			kind: 'root',
+			properties: [
+				{
+					name: 'from-a',
+					value: 'true',
+					source: { file: '/includes/a.dtsi', startLine: 3, endLine: 3 },
+				},
+				{
+					name: 'from-b',
+					value: '< 1 >',
+					source: { file: '/includes/b.dtsi', startLine: 7, endLine: 7 },
+				},
+			],
+			children: [],
+			deleteDirectives: [],
+			source: { file: '/boards/root.dts', startLine: 1, endLine: 9 },
+		};
+		const model = renderPreviewModel(root);
+		const html = renderHtml(root);
+
+		assert.strictEqual(model.text, [
+			'/ {',
+			'    from-a;',
+			'    from-b = < 1 >;',
+			'};',
+		].join('\n'));
+		assert.strictEqual(model.fileColors.size, 3);
+		assert.strictEqual(new Set(model.fileColors.values()).size, 3);
+		assert.ok(model.decorations.some(item =>
+			item.options.linesDecorationsClassName?.startsWith('dt-source')
+			&& item.options.hoverMessage?.value === 'Source: /includes/a.dtsi:3'
+		));
+		assert.ok(html.includes('content: "";'));
+		assert.ok(html.includes('background: hsl('));
+		assert.ok(!html.includes('content: "a.dtsi";'));
+		assert.ok(!html.includes('content: "b.dtsi";'));
+	});
+
 	test('handles missing display labels while parsing and rendering', () => {
 		const root = merge(`
 / {

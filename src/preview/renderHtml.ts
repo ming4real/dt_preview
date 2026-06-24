@@ -55,10 +55,6 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function escapeCss(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
-}
-
 function colorForFile(file: string): string {
   let hash = 0;
 
@@ -350,8 +346,12 @@ function sourceColorCss(fileColors: Map<string, string>): string {
   border-left: 4px solid ${color};
 }
 .${className}::after {
-  content: "${escapeCss(path.basename(file))}";
-  color: ${color};
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 100%;
+  background: ${color};
+  opacity: 0.55;
 }
 `;
   }).join("\n");
