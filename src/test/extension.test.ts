@@ -304,13 +304,55 @@ fragment@1 {
 		assert.ok(!model.text.includes('undefined:'));
 	});
 
-	test('renders the selected preview root at the top', () => {
-		const root = merge('/ { node {}; };');
-		const html = renderHtml(root, '/boards/board-a.dts');
+	test('renders an include hierarchy at the top', () => {
+		const rootFile = '/boards/board-a.dts';
+		const socFile = '/boards/soc.dtsi';
+		const pinsFile = '/boards/pins.dtsi';
+		const clocksFile = '/boards/clocks.dtsi';
+		const overlayFile = '/boards/overlays/foo.dtsi';
+		const missingFile = '/boards/missing.dtsi';
+		const includeGraph = new Map<string, Set<string>>([
+			[rootFile, new Set([socFile, overlayFile, missingFile])],
+			[socFile, new Set([pinsFile, clocksFile])],
+			[overlayFile, new Set([pinsFile])],
+			[pinsFile, new Set()],
+			[clocksFile, new Set()],
+			[missingFile, new Set()],
+		]);
+		const root: DtNode = {
+			name: '/',
+			labels: [],
+			kind: 'root',
+			properties: [
+				{ name: 'root-prop', value: 'true', source: { file: rootFile, startLine: 1, endLine: 1 } },
+				{ name: 'soc-prop', value: 'true', source: { file: socFile, startLine: 2, endLine: 2 } },
+				{ name: 'pins-prop', value: 'true', source: { file: pinsFile, startLine: 3, endLine: 3 } },
+				{ name: 'overlay-prop', value: 'true', source: { file: overlayFile, startLine: 4, endLine: 4 } },
+			],
+			children: [],
+			deleteDirectives: [],
+			source: { file: rootFile, startLine: 1, endLine: 9 },
+			diagnostics: [{
+				severity: 'warning',
+				message: `Included file not found: ${missingFile}`,
+				source: { file: rootFile, startLine: 5, endLine: 5 },
+			}],
+		};
+		const html = renderHtml(root, { rootFile, includeGraph });
 
-		assert.ok(html.includes('<span class="preview-root-label">Preview Root:</span>'));
-		assert.ok(html.includes('<span>board-a.dts</span>'));
-		assert.ok(html.includes('title="/boards/board-a.dts"'));
+		assert.ok(html.includes('<section class="include-tree" aria-label="Include hierarchy">'));
+		assert.ok(html.includes('<div class="include-tree-title">Root:</div>'));
+		assert.ok(html.includes('>board-a.dts</span>'));
+		assert.ok(html.includes('>soc.dtsi</span>'));
+		assert.ok(html.includes('>pins.dtsi</span>'));
+		assert.ok(html.includes('>clocks.dtsi</span>'));
+		assert.ok(html.includes('>overlays/foo.dtsi</span>'));
+		assert.ok(html.includes('>missing.dtsi</span>'));
+		assert.ok(html.includes('<span class="include-tree-warning">missing</span>'));
+		assert.ok(html.includes('<span class="include-tree-note">already shown</span>'));
+		assert.ok(html.includes('title="/boards/soc.dtsi"'));
+		assert.ok(html.includes('style="color: hsl('));
+		assert.ok(!html.includes('<span class="preview-root-label">Preview Root:</span>'));
 	});
 
 	test('renders Monaco preview shell with local loader and CSP', () => {

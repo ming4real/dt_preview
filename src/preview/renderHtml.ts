@@ -39,6 +39,7 @@ export type MonacoPreviewModel = {
 
 export type RenderHtmlOptions = {
   cspSource?: string;
+  includeGraph?: Map<string, Set<string>>;
   monacoBaseUri?: string;
   nonce?: string;
   rootFile?: string;
@@ -63,6 +64,31 @@ function colorForFile(file: string): string {
   }
 
   return `hsl(${Math.abs(hash) % 360}, 70%, 80%)`;
+}
+
+function missingIncludeFiles(diagnostics: DtDiagnostic[]): Set<string> {
+  const missing = new Set<string>();
+  const prefix = "Included file not found: ";
+
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.message.startsWith(prefix)) {
+      missing.add(diagnostic.message.slice(prefix.length));
+    }
+  }
+
+  return missing;
+}
+
+function displayFileName(file: string, rootFile?: string): string {
+  if (!rootFile || file === rootFile) {
+    return path.basename(file);
+  }
+
+  const relative = path.relative(path.dirname(rootFile), file);
+
+  return relative.startsWith("..") || path.isAbsolute(relative)
+    ? path.basename(file)
+    : relative;
 }
 
 function sourceLabel(source: SourceSpan): string {
@@ -357,6 +383,82 @@ function sourceColorCss(fileColors: Map<string, string>): string {
   }).join("\n");
 }
 
+function renderIncludeHierarchy(
+  rootFile: string | undefined,
+  includeGraph: Map<string, Set<string>> | undefined,
+  fileColors: Map<string, string>,
+  diagnostics: DtDiagnostic[]
+): string {
+  if (!rootFile) {
+    return "";
+  }
+
+  const root = path.resolve(rootFile);
+  const missing = missingIncludeFiles(diagnostics);
+  const shown = new Set<string>();
+
+  function color(file: string): string {
+    if (!fileColors.has(file)) {
+      fileColors.set(file, colorForFile(file));
+    }
+
+    return fileColors.get(file) ?? colorForFile(file);
+  }
+
+  function childrenFor(file: string): string[] {
+    return [...(includeGraph?.get(file) ?? [])].sort((a, b) => a.localeCompare(b));
+  }
+
+  function row(file: string, depth: number, branch: string, duplicate: boolean): string {
+    const missingFile = missing.has(file);
+    const classes = [
+      "include-tree-row",
+      missingFile ? "include-tree-row-missing" : "",
+      duplicate ? "include-tree-row-duplicate" : "",
+    ].filter(Boolean).join(" ");
+    const suffix = missingFile ? " missing" : duplicate ? " already shown" : "";
+
+    return `
+      <div class="${classes}" style="padding-left: ${depth * 18}px" title="${escapeHtml(file)}${suffix}">
+        <span class="include-tree-branch">${escapeHtml(branch)}</span>
+        <span class="include-tree-file" style="color: ${color(file)}">${escapeHtml(displayFileName(file, root))}</span>
+        ${missingFile ? '<span class="include-tree-warning">missing</span>' : ""}
+        ${duplicate ? '<span class="include-tree-note">already shown</span>' : ""}
+      </div>`;
+  }
+
+  function renderFile(file: string, depth: number, branch: string, ancestors: Set<string>): string {
+    const duplicate = shown.has(file);
+    const circular = ancestors.has(file);
+    shown.add(file);
+
+    let html = row(file, depth, branch, duplicate || circular);
+
+    if (duplicate || circular) {
+      return html;
+    }
+
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(file);
+
+    const children = childrenFor(file);
+
+    children.forEach((child, index) => {
+      html += renderFile(child, depth + 1, index === children.length - 1 ? "└─" : "├─", nextAncestors);
+    });
+
+    return html;
+  }
+
+  return `
+<section class="include-tree" aria-label="Include hierarchy">
+  <div class="include-tree-title">Root:</div>
+  <div class="include-tree-list">
+    ${renderFile(root, 0, "", new Set<string>())}
+  </div>
+</section>`;
+}
+
 function jsonScript(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c");
 }
@@ -374,13 +476,7 @@ export function renderHtml(root: DtNode, optionsOrRootFile?: RenderHtmlOptions |
   const monacoBaseUri = options.monacoBaseUri ?? "";
   const model = renderPreviewModel(root);
   const rootFile = options.rootFile;
-  const rootBanner = rootFile ? `
-<div class="preview-root" title="${escapeHtml(rootFile)}">
-  <span class="preview-root-label">Preview Root:</span>
-  <span>${escapeHtml(path.basename(rootFile))}</span>
-  <span class="preview-root-path">${escapeHtml(rootFile)}</span>
-</div>
-` : "";
+  const includeHierarchy = renderIncludeHierarchy(rootFile, options.includeGraph, model.fileColors, root.diagnostics ?? []);
 
   return `
 <!DOCTYPE html>
@@ -406,23 +502,45 @@ body {
   flex-direction: column;
 }
 
-.preview-root {
+.include-tree {
   flex: 0 0 auto;
-  padding: 8px;
+  max-height: 28vh;
+  overflow: auto;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--vscode-panel-border);
   background: var(--vscode-editor-background);
+}
+
+.include-tree-title {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.include-tree-row {
+  display: flex;
+  align-items: center;
+  min-height: 18px;
   white-space: nowrap;
 }
 
-.preview-root-label {
-  font-weight: bold;
-  margin-right: 6px;
+.include-tree-branch {
+  width: 20px;
+  color: var(--vscode-descriptionForeground);
 }
 
-.preview-root-path {
-  opacity: 0.65;
-  margin-left: 12px;
+.include-tree-file {
+  font-weight: 600;
+}
+
+.include-tree-warning,
+.include-tree-note {
+  margin-left: 8px;
+  color: var(--vscode-editorWarning-foreground);
   font-size: 0.85em;
+}
+
+.include-tree-row-duplicate .include-tree-file {
+  opacity: 0.65;
 }
 
 #editor {
@@ -473,7 +591,7 @@ ${sourceColorCss(model.fileColors)}
 </style>
 </head>
 <body>
-${rootBanner}
+${includeHierarchy}
 <div id="editor"></div>
 <script nonce="${nonce}">
 const previewData = ${jsonScript({

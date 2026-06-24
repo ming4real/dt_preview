@@ -117,6 +117,7 @@ export class DeviceTreePreviewPanel {
       );
       this.panel!.webview.html = renderHtml(merged, {
         cspSource: this.panel!.webview.cspSource,
+        includeGraph: dependencyGraph,
         monacoBaseUri: monacoBaseUri.toString(),
         nonce: this.createNonce(),
         rootFile,
