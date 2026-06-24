@@ -115,6 +115,35 @@ suite('Extension Test Suite', () => {
 		assert.deepStrictEqual(serial.labels, ['uart0']);
 	});
 
+	test('preserves comma-containing property names as single properties', () => {
+		const root = merge(`
+/ {
+	node {
+		st,drive;
+		qcom,foo = <1>;
+		nvidia,enable-hw-based-cs;
+	};
+};
+`);
+		const node = child(root, 'node');
+		const model = renderPreviewModel(root);
+
+		assert.deepStrictEqual(node.properties.map(item => item.name), [
+			'st,drive',
+			'qcom,foo',
+			'nvidia,enable-hw-based-cs',
+		]);
+		assert.strictEqual(prop(node, 'st,drive'), 'true');
+		assert.strictEqual(prop(node, 'qcom,foo'), '< 1 >');
+		assert.strictEqual(prop(node, 'nvidia,enable-hw-based-cs'), 'true');
+		assert.strictEqual(prop(node, 'st'), undefined);
+		assert.strictEqual(prop(node, 'drive'), undefined);
+		assert.ok(model.text.includes('        st,drive;'));
+		assert.ok(model.text.includes('        qcom,foo = < 1 >;'));
+		assert.ok(model.text.includes('        nvidia,enable-hw-based-cs;'));
+		assert.ok(!model.text.includes('        st;\n        drive;'));
+	});
+
 	test('applies overlay fragments by target label', () => {
 		const root = merge(`
 / {

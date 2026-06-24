@@ -65,7 +65,7 @@ export function lexDts(input: string, file: string, startLine = 1): Token[] {
   }
 
   function isIdentifierPart(ch: string): boolean {
-    return /[A-Za-z0-9_\-+.]/.test(ch);
+    return /[A-Za-z0-9_\-+.,]/.test(ch);
   }
 
   while (i < input.length) {
