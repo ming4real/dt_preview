@@ -47,6 +47,7 @@ export type RenderHtmlOptions = {
 
 const INDENT = "    ";
 const OVERVIEW_RULER_CENTER = 2;
+const DEVICE_TREE_EXTENSIONS = new Set([".dts", ".dtsi", ".dtso"]);
 
 function escapeHtml(value: string): string {
   return value
@@ -66,13 +67,21 @@ function colorForFile(file: string): string {
   return `hsl(${Math.abs(hash) % 360}, 70%, 80%)`;
 }
 
+function isDeviceTreeSourceFile(file: string): boolean {
+  return DEVICE_TREE_EXTENSIONS.has(path.extname(file).toLowerCase());
+}
+
 function missingIncludeFiles(diagnostics: DtDiagnostic[]): Set<string> {
   const missing = new Set<string>();
   const prefix = "Included file not found: ";
 
   for (const diagnostic of diagnostics) {
     if (diagnostic.message.startsWith(prefix)) {
-      missing.add(diagnostic.message.slice(prefix.length));
+      const file = diagnostic.message.slice(prefix.length);
+
+      if (isDeviceTreeSourceFile(file)) {
+        missing.add(file);
+      }
     }
   }
 
@@ -168,22 +177,6 @@ function decorationForDeletedBlock(
   };
 }
 
-function decorationForWarning(lineNumber: number, line: string, diagnostic: DtDiagnostic): MonacoPreviewDecoration {
-  return {
-    range: lineRange(lineNumber, line),
-    options: {
-      isWholeLine: true,
-      linesDecorationsClassName: "dt-warning-line",
-      glyphMarginClassName: "dt-warning-glyph",
-      hoverMessage: { value: diagnostic.message },
-      overviewRuler: {
-        color: "var(--vscode-editorWarning-foreground)",
-        position: OVERVIEW_RULER_CENTER,
-      },
-    },
-  };
-}
-
 function fileClass(index: number): string {
   return `dt-source-${index}`;
 }
@@ -208,11 +201,6 @@ export function renderPreviewModel(root: DtNode): MonacoPreviewModel {
     line: string;
     lineNumber: number;
     source: SourceSpan;
-  }> = [];
-  const warningLines: Array<{
-    diagnostic: DtDiagnostic;
-    line: string;
-    lineNumber: number;
   }> = [];
   const deletedRanges: DeletedPreviewRange[] = [];
 
@@ -318,31 +306,11 @@ export function renderPreviewModel(root: DtNode): MonacoPreviewModel {
     pushLine(`${INDENT.repeat(depth)}};`, node.source);
   }
 
-  for (const diagnostic of root.diagnostics ?? []) {
-    const line = `/* ${diagnostic.severity}: ${diagnostic.message} */`;
-    const lineNumber = pushLine(line);
-    warningLines.push({
-      diagnostic,
-      line,
-      lineNumber,
-    });
-  }
-
-  if ((root.diagnostics?.length ?? 0) > 0) {
-    pushLine("");
-  }
-
   renderNode(root, 0);
 
   for (const { line, lineNumber, source } of sourceLines) {
     if (!lineIntersectsDeletedRanges(lineNumber, deletedRanges)) {
       decorations.push(decorationForSource(lineNumber, line, source, addFileColor(source.file, fileColors)));
-    }
-  }
-
-  for (const { diagnostic, line, lineNumber } of warningLines) {
-    if (!lineIntersectsDeletedRanges(lineNumber, deletedRanges)) {
-      decorations.push(decorationForWarning(lineNumber, line, diagnostic));
     }
   }
 
@@ -422,7 +390,7 @@ function renderIncludeHierarchy(
       <div class="${classes}" style="padding-left: ${depth * 18}px" title="${escapeHtml(file)}${suffix}">
         <span class="include-tree-branch">${escapeHtml(branch)}</span>
         <span class="include-tree-file" style="color: ${color(file)}">${escapeHtml(displayFileName(file, root))}</span>
-        ${missingFile ? '<span class="include-tree-warning">missing</span>' : ""}
+        ${missingFile ? '<span class="include-tree-warning">⚠ Missing</span>' : ""}
         ${duplicate ? '<span class="include-tree-note">already shown</span>' : ""}
       </div>`;
   }
@@ -571,15 +539,6 @@ body {
 
 .dtbe-deleted-block-line {
   border-left: 4px solid var(--vscode-disabledForeground);
-}
-
-.dt-warning-line {
-  border-left: 4px solid var(--vscode-editorWarning-foreground);
-}
-
-.dt-warning-glyph {
-  background: var(--vscode-editorWarning-foreground);
-  border-radius: 50%;
 }
 
 .lines-content .cdr {

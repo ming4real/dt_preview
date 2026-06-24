@@ -5,6 +5,7 @@ import { renderHtml } from "./renderHtml";
 import { ReadFile, collectTransitiveIncludes, resolveIncludesWithDiagnostics } from "../dts/includeResolver";
 import { parseDtsChunks } from "../dts/parser";
 import { mergeTrees } from "../dts/merger";
+import { DtDiagnostic } from "../dts/types";
 
 export class DeviceTreePreviewPanel {
   private static panel: vscode.WebviewPanel | undefined;
@@ -74,7 +75,10 @@ export class DeviceTreePreviewPanel {
   static previewThisDtsAsRoot(sourceFile: string, extensionUri: vscode.Uri): boolean {
     const rootFile = path.resolve(sourceFile);
 
-    if (path.extname(rootFile) !== ".dts") {
+    const allowedExtensions = new Set([".dts", ".dtsi"]);
+    const ext = path.extname(rootFile).toLowerCase();
+
+    if (!allowedExtensions.has(ext)) {
       vscode.window.showErrorMessage("Select a .dts file to use as the preview root.");
       this.log({
         rootFile,
@@ -127,6 +131,7 @@ export class DeviceTreePreviewPanel {
         changedFile: path.resolve(changedFile),
         trigger,
         durationMs: Date.now() - started,
+        diagnostics,
       });
     } catch (error) {
       this.panel!.webview.html = `<pre>${String(error)}</pre>`;
@@ -170,6 +175,7 @@ export class DeviceTreePreviewPanel {
     changedFile: string;
     trigger: string;
     durationMs: number;
+    diagnostics?: DtDiagnostic[];
   }) {
     this.output ??= vscode.window.createOutputChannel("Device Tree Preview");
     this.output.appendLine("[DTB Editor]");
@@ -177,6 +183,9 @@ export class DeviceTreePreviewPanel {
     this.output.appendLine(`Changed: ${entry.changedFile}`);
     this.output.appendLine(`Trigger: ${entry.trigger}`);
     this.output.appendLine(`Rebuild: ${entry.durationMs} ms`);
+    for (const diagnostic of entry.diagnostics ?? []) {
+      this.output.appendLine(`${diagnostic.severity}: ${diagnostic.message}`);
+    }
   }
 
   private static createNonce(): string {

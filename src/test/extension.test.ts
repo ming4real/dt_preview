@@ -348,11 +348,60 @@ fragment@1 {
 		assert.ok(html.includes('>clocks.dtsi</span>'));
 		assert.ok(html.includes('>overlays/foo.dtsi</span>'));
 		assert.ok(html.includes('>missing.dtsi</span>'));
-		assert.ok(html.includes('<span class="include-tree-warning">missing</span>'));
+		assert.ok(html.includes('<span class="include-tree-warning">⚠ Missing</span>'));
 		assert.ok(html.includes('<span class="include-tree-note">already shown</span>'));
 		assert.ok(html.includes('title="/boards/soc.dtsi"'));
 		assert.ok(html.includes('style="color: hsl('));
 		assert.ok(!html.includes('<span class="preview-root-label">Preview Root:</span>'));
+	});
+
+	test('keeps missing include warnings out of rendered DTS text', () => {
+		const rootFile = '/boards/board-a.dts';
+		const missingDtsi = '/boards/missing.dtsi';
+		const missingHeader = '/boards/dt-bindings/example.h';
+		const includeGraph = new Map<string, Set<string>>([
+			[rootFile, new Set([missingDtsi, missingHeader])],
+			[missingDtsi, new Set()],
+			[missingHeader, new Set()],
+		]);
+		const root: DtNode = {
+			name: '/',
+			labels: [],
+			kind: 'root',
+			properties: [
+				{ name: 'model', value: '"board"', source: { file: rootFile, startLine: 1, endLine: 1 } },
+			],
+			children: [],
+			deleteDirectives: [],
+			source: { file: rootFile, startLine: 1, endLine: 9 },
+			diagnostics: [
+				{
+					severity: 'warning',
+					message: `Included file not found: ${missingDtsi}`,
+					source: { file: rootFile, startLine: 2, endLine: 2 },
+				},
+				{
+					severity: 'warning',
+					message: `Included file not found: ${missingHeader}`,
+					source: { file: rootFile, startLine: 3, endLine: 3 },
+				},
+			],
+		};
+		const model = renderPreviewModel(root);
+		const html = renderHtml(root, { rootFile, includeGraph });
+		const headerStart = html.lastIndexOf('<div class="include-tree-row"', html.indexOf('>dt-bindings/example.h</span>'));
+		const headerEntry = html.slice(headerStart, html.indexOf('</div>', headerStart));
+
+		assert.strictEqual(model.text, [
+			'/ {',
+			'    model = "board";',
+			'};',
+		].join('\n'));
+		assert.ok(!model.text.includes('/* warning: Included file not found'));
+		assert.ok(html.includes('>missing.dtsi</span>'));
+		assert.ok(html.includes('<span class="include-tree-warning">⚠ Missing</span>'));
+		assert.ok(html.includes('>dt-bindings/example.h</span>'));
+		assert.ok(!headerEntry.includes('<span class="include-tree-warning">⚠ Missing</span>'));
 	});
 
 	test('renders Monaco preview shell with local loader and CSP', () => {
