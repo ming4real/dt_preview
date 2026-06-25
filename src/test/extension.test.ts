@@ -417,7 +417,7 @@ fragment@1 {
 		const root = merge('/ { node {}; };');
 		const html = renderHtml(root, {
 			cspSource: 'vscode-webview://example',
-			monacoBaseUri: 'vscode-webview://example/node_modules/monaco-editor/min/vs',
+			monacoBaseUri: 'vscode-webview://example/media/monaco',
 			nonce: 'testnonce',
 			rootFile: '/boards/board-a.dts',
 		});
@@ -427,7 +427,8 @@ fragment@1 {
 		assert.ok(html.includes('font-src vscode-webview://example data:'));
 		assert.ok(html.includes("style-src vscode-webview://example 'unsafe-inline'"));
 		assert.ok(html.includes("script-src vscode-webview://example 'nonce-testnonce'"));
-		assert.ok(html.includes('src="vscode-webview://example/node_modules/monaco-editor/min/vs/loader.js"'));
+		assert.ok(html.includes('src="vscode-webview://example/media/monaco/vs/loader.js"'));
+		assert.ok(html.includes("paths: { vs: previewData.monacoBaseUri + '/vs' }"));
 		assert.ok(html.includes("require(['vs/editor/editor.main']"));
 		assert.ok(html.includes('readOnly: true'));
 		assert.ok(html.includes('.dtbe-deleted-block'));

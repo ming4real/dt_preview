@@ -620,19 +620,10 @@ const previewData = ${jsonScript({
     monacoBaseUri,
   })};
 </script>
-<script nonce="${nonce}" src="${escapeHtml(monacoBaseUri)}/loader.js"></script>
+<script nonce="${nonce}" src="${escapeHtml(monacoBaseUri)}/vs/loader.js"></script>
 <script nonce="${nonce}">
 const vscodeApi = acquireVsCodeApi();
-require.config({ paths: { vs: previewData.monacoBaseUri } });
-self.MonacoEnvironment = {
-  getWorkerUrl: function (_moduleId, label) {
-    const workerMain = previewData.monacoBaseUri + '/base/worker/workerMain.js';
-    return 'data:text/javascript;charset=utf-8,' + encodeURIComponent(
-      'self.MonacoEnvironment = { baseUrl: ' + JSON.stringify(previewData.monacoBaseUri + '/') + ' };' +
-      'importScripts(' + JSON.stringify(workerMain) + ');'
-    );
-  }
-};
+require.config({ paths: { vs: previewData.monacoBaseUri + '/vs' } });
 require(['vs/editor/editor.main'], function () {
   monaco.languages.register({ id: 'devicetree' });
   monaco.languages.setMonarchTokensProvider('devicetree', {

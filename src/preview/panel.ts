@@ -16,7 +16,6 @@ export class DeviceTreePreviewPanel {
 
   private static ensurePanel(extensionUri: vscode.Uri) {
     if (!this.panel) {
-      const nodeModulesRoot = vscode.Uri.joinPath(extensionUri, "node_modules");
       const mediaRoot = vscode.Uri.joinPath(extensionUri, "media");
 
       this.panel = vscode.window.createWebviewPanel(
@@ -26,7 +25,7 @@ export class DeviceTreePreviewPanel {
         {
           enableScripts: true,
           retainContextWhenHidden: true,
-          localResourceRoots: [nodeModulesRoot, mediaRoot],
+          localResourceRoots: [mediaRoot],
         }
       );
 
@@ -52,7 +51,7 @@ export class DeviceTreePreviewPanel {
     }
 
     const monacoBaseUri = this.panel!.webview.asWebviewUri(
-      vscode.Uri.joinPath(extensionUri, "node_modules", "monaco-editor", "min", "vs")
+      vscode.Uri.joinPath(extensionUri, "media", "monaco")
     );
     this.panel!.webview.html = renderHtml({
       name: "/",
@@ -122,7 +121,7 @@ export class DeviceTreePreviewPanel {
       this.dependencyClosure = collectTransitiveIncludes(rootFile, dependencyGraph);
       this.activeRootDts = rootFile;
       const monacoBaseUri = this.panel!.webview.asWebviewUri(
-        vscode.Uri.joinPath(extensionUri, "node_modules", "monaco-editor", "min", "vs")
+        vscode.Uri.joinPath(extensionUri, "media", "monaco")
       );
       this.panel!.webview.html = renderHtml(merged, {
         activeFile: this.activeEditorFile(),
