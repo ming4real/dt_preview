@@ -1,209 +1,63 @@
-# Device Tree Editor (DTBE)
+# Device Tree Editor
 
-A Visual Studio Code extension for exploring, editing, and understanding Linux Device Trees.
+![Logo](images/Logo.png)
 
-DTBE provides a live preview of the fully merged Device Tree while preserving the origin of every node and property, making it easier to work with complex `.dts` and `.dtsi` hierarchies.
+Device Tree Editor is a Visual Studio Code extension for inspecting Linux Device Tree source trees. It builds a merged preview from a root `.dts` or `.dtsi` file, tracks where each rendered line came from, and makes large include hierarchies easier to follow.
 
 ## Features
 
-### Live Merged Preview
+- Preview a merged Device Tree from the active `.dts` or `.dtsi` file.
+- Resolve `#include` and `/include/` directives.
+- Show a clickable include hierarchy at the top of the preview.
+- Preserve per-file colour coding with a compact source gutter.
+- Open included files directly from the file key.
+- Highlight the currently active editor file in the file key.
+- Merge repeated root blocks and child nodes.
+- Apply label-reference overlays such as `&uart0 { ... };`.
+- Preserve and mark deleted nodes/properties from `/delete-node/` and `/delete-property/`.
+- Keep missing Device Tree includes visible in the file key without injecting warning comments into the rendered DTS.
+- Render the preview including syntax highlighting and search.
 
-Open a Device Tree source file and view the fully resolved tree alongside the editor.
+![Screenshot](images/screenshot_1.png)
 
-The preview:
+## Usage
 
-- Resolves `/include/` directives
-- Merges included files
-- Applies overlays
-- Resolves label references (`&label`)
-- Displays the final effective Device Tree
+1. Open a `.dts` or `.dtsi` file.
+2. Run **Device Tree Editor: Preview DTS** from the Command Palette.
+3. The Device Tree Preview opens beside the editor.
+4. Use the file key at the top of the preview to inspect the include hierarchy.
+5. Click a filename in the file key to open that file.
 
-### Source Tracking
+From the preview title bar, use **Use Active Editor as Root** to rebuild the preview using the currently active editor file.
 
-Every node and property retains information about where it originated.
+## Preview Behaviour
 
-The preview uses color coding to show:
+The preview shows the final merged tree rather than the raw source file. It preserves useful source context without cluttering the DTS output:
 
-- Original `.dts` file content
-- Included `.dtsi` content
-- Overlay modifications
-- Generated merge results
+- The first gutter column is a colour strip, not a repeated filename column.
+- The file key shows which file each colour represents.
+- The file key is nested so parent/child include relationships are visible.
+- Missing `.dts`, `.dtsi`, and `.dtso` includes are marked with `Missing` in the file key.
+- Missing non-DTS includes, such as C header-style binding files, do not produce preview warning comments.
 
-This makes it easy to understand:
-
-- Where a setting comes from
-- Which file overrides a value
-- How overlays affect the final tree
-
-### Overlay Support
-
-Supports:
-
-```dts
-/ {
-    ...
-};
-
-&uart0 {
-    status = "okay";
-};
-
-&i2c0 {
-    ...
-};
-```
-
-Including accurate merging of:
-
-- `/ { ... };`
-- `&label { ... };`
-- Multiple overlays targeting the same node
-
-### Delete Directives
-
-Supports:
-
-```dts
-/delete-node/ node_name;
-
-/delete-property/ property_name;
-```
-
-Deleted content is preserved in the preview:
-
-- Displayed in grey
-- Marked as deleted
-- Annotated with the location of the delete directive
-
-Example:
-
-```dts
-/* Deleted by board.dtsi:42 */
-
-ethernet@1000 {
-    status = "disabled";
-};
-```
-
-### Label Display
-
-Node labels are displayed in the merged view.
-
-Example:
-
-```dts
-uart0: serial@1000 {
-    status = "okay";
-};
-```
-
-### Missing Include Warnings
-
-Missing include files generate warnings instead of errors.
-
-Example:
-
-```text
-Warning: Unable to resolve include:
-soc/nonexistent.dtsi
-```
-
-The preview continues rendering with the remaining files.
-
-## Installation
-
-### From VSIX
-
-Install a packaged extension:
-
-```bash
-code --install-extension dtbe-x.y.z.vsix
-```
-
-Or:
-
-1. Open Extensions
-2. Click `...`
-3. Select **Install from VSIX...**
-4. Choose the generated `.vsix`
-
-## Development
-
-### Prerequisites
-
-- Node.js
-- npm
-- Visual Studio Code
-
-### Install Dependencies
-
-```bash
-npm install
-```
-
-### Build
-
-```bash
-npm run compile
-```
-
-### Run Extension
-
-Press:
-
-```text
-F5
-```
-
-This launches a new Extension Development Host window.
-
-Open a Device Tree file and run:
-
-```text
-DTBE: Open Preview
-```
-
-## Packaging
-
-Install VSCE:
-
-```bash
-npm install -g @vscode/vsce
-```
-
-Create a VSIX package:
-
-```bash
-vsce package
-```
-
-This generates:
-
-```text
-dtbe-0.0.1.vsix
-```
-
-Install:
-
-```bash
-code --install-extension dtbe-0.0.1.vsix
-```
-
-## Supported Merge Operations
+## Supported DTS Patterns
 
 ### Includes
 
 ```dts
-/include/ "soc.dtsi"
+#include "soc.dtsi"
+/include/ "pins.dtsi"
 ```
 
 ### Root Merges
 
 ```dts
 / {
-    chosen {
-        ...
-    };
+    model = "example";
+};
+
+/ {
+    compatible = "vendor,board";
 };
 ```
 
@@ -215,49 +69,22 @@ code --install-extension dtbe-0.0.1.vsix
 };
 ```
 
-### Multiple Overlay Fragments
-
-```dts
-&uart0 {
-    current-speed = <115200>;
-};
-
-&uart0 {
-    status = "okay";
-};
-```
-
-### Delete Property
+### Delete Directives
 
 ```dts
 /delete-property/ status;
+/delete-node/ old_node;
 ```
 
-### Delete Node
-
-```dts
-/delete-node/ ethernet@1000;
-```
+Deleted content is shown as commented, muted DTS so you can still see what was removed and where the delete directive came from.
 
 ## Known Limitations
 
-Current focus is on providing an accurate visualization of the final Device Tree.
-
-Potential future improvements:
-
-- Full Device Tree grammar support
-- DTS schema validation
-- Cross-reference navigation
-- Property value diffing
-- Search and filtering
-- Export merged DTS
-- Live editing of merged nodes
-- Device Tree Compiler integration
+- The parser focuses on practical preview and merge behaviour, not full Device Tree schema validation.
+- The extension does not invoke `dtc`.
+- The preview is read-only.
+- Some advanced DTS/preprocessor constructs may not be represented exactly.
 
 ## License
 
-MIT License
-
-## Acknowledgements
-
-Built for Linux Device Tree developers who need to understand large DTS hierarchies, overlays, and board-specific customizations without manually tracing dozens of included files.
+MIT. See [LICENSE](LICENSE).

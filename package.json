@@ -1,12 +1,30 @@
 {
   "name": "dtbe",
   "displayName": "dtbe",
-  "description": "",
-  "version": "0.1.1",
+  "description": "Device Tree Editor - Live Preview of merged sources",
+  "icon": "images/icon.png",
+  "version": "0.2.0",
   "engines": {
     "vscode": "^1.125.0"
   },
+  "keywords": [
+    "device tree",
+    "dts",
+    "dtsi",
+    "dtb",
+    "linux",
+    "embedded",
+    "embedded linux",
+    "kernel",
+    "arm",
+    "zephyr",
+    "yocto",
+    "nxp",
+    "stm32",
+    "raspberry pi"
+  ],
   "categories": [
+    "Programming Languages",
     "Other"
   ],
   "repository": {
@@ -18,7 +36,7 @@
     "commands": [
       {
         "command": "dtbEditor.previewThisDtsAsRoot",
-        "title": "Device Tree: Preview This DTS"
+        "title": "Device Tree Editor: Preview DTS"
       },
       {
         "command": "dtbEditor.useActiveEditorAsRoot",
