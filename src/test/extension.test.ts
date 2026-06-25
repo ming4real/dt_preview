@@ -338,20 +338,29 @@ fragment@1 {
 				source: { file: rootFile, startLine: 5, endLine: 5 },
 			}],
 		};
-		const html = renderHtml(root, { rootFile, includeGraph });
+		const html = renderHtml(root, { activeFile: pinsFile, rootFile, includeGraph });
 
 		assert.ok(html.includes('<section class="include-tree" aria-label="Include hierarchy">'));
 		assert.ok(html.includes('<div class="include-tree-title">Root:</div>'));
-		assert.ok(html.includes('>board-a.dts</span>'));
-		assert.ok(html.includes('>soc.dtsi</span>'));
-		assert.ok(html.includes('>pins.dtsi</span>'));
-		assert.ok(html.includes('>clocks.dtsi</span>'));
-		assert.ok(html.includes('>overlays/foo.dtsi</span>'));
-		assert.ok(html.includes('>missing.dtsi</span>'));
+		assert.ok(html.includes('data-display-name="board-a.dts"'));
+		assert.ok(html.includes('data-display-name="soc.dtsi"'));
+		assert.ok(html.includes('data-display-name="pins.dtsi"'));
+		assert.ok(html.includes('data-display-name="clocks.dtsi"'));
+		assert.ok(html.includes('data-display-name="overlays/foo.dtsi"'));
+		assert.ok(html.includes('data-display-name="missing.dtsi"'));
+		assert.ok(html.includes('data-file-path="/boards/pins.dtsi"'));
+		assert.ok(html.includes('data-color-index="'));
+		assert.ok(html.includes('<span class="include-tree-swatch" style="background: hsl('));
 		assert.ok(html.includes('<span class="include-tree-warning">⚠ Missing</span>'));
 		assert.ok(html.includes('<span class="include-tree-note">already shown</span>'));
 		assert.ok(html.includes('title="/boards/soc.dtsi"'));
 		assert.ok(html.includes('style="color: hsl('));
+		assert.ok(html.includes('cursor: pointer;'));
+		assert.ok(html.includes('text-decoration: underline;'));
+		assert.ok(html.includes('var(--vscode-list-activeSelectionBackground)'));
+		assert.ok(html.includes("command: 'openFile'"));
+		assert.ok(html.includes("command === 'activeFile'"));
+		assert.ok(html.includes(`"activeFile":"${pinsFile}"`));
 		assert.ok(!html.includes('<span class="preview-root-label">Preview Root:</span>'));
 	});
 
@@ -389,7 +398,7 @@ fragment@1 {
 		};
 		const model = renderPreviewModel(root);
 		const html = renderHtml(root, { rootFile, includeGraph });
-		const headerStart = html.lastIndexOf('<div class="include-tree-row"', html.indexOf('>dt-bindings/example.h</span>'));
+		const headerStart = html.lastIndexOf('<div class="include-tree-row"', html.indexOf('data-display-name="dt-bindings/example.h"'));
 		const headerEntry = html.slice(headerStart, html.indexOf('</div>', headerStart));
 
 		assert.strictEqual(model.text, [
@@ -398,9 +407,9 @@ fragment@1 {
 			'};',
 		].join('\n'));
 		assert.ok(!model.text.includes('/* warning: Included file not found'));
-		assert.ok(html.includes('>missing.dtsi</span>'));
+		assert.ok(html.includes('data-display-name="missing.dtsi"'));
 		assert.ok(html.includes('<span class="include-tree-warning">⚠ Missing</span>'));
-		assert.ok(html.includes('>dt-bindings/example.h</span>'));
+		assert.ok(html.includes('data-display-name="dt-bindings/example.h"'));
 		assert.ok(!headerEntry.includes('<span class="include-tree-warning">⚠ Missing</span>'));
 	});
 

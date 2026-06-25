@@ -24,7 +24,11 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
-  context.subscriptions.push(previewRoot, useActiveEditorAsRoot, changeWatcher);
+  const activeEditorWatcher = vscode.window.onDidChangeActiveTextEditor(editor => {
+    DeviceTreePreviewPanel.handleActiveEditorChange(editor);
+  });
+
+  context.subscriptions.push(previewRoot, useActiveEditorAsRoot, changeWatcher, activeEditorWatcher);
 }
 
 export function deactivate() {}

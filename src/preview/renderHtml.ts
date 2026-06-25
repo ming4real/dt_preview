@@ -38,6 +38,7 @@ export type MonacoPreviewModel = {
 };
 
 export type RenderHtmlOptions = {
+  activeFile?: string;
   cspSource?: string;
   includeGraph?: Map<string, Set<string>>;
   monacoBaseUri?: string;
@@ -48,6 +49,14 @@ export type RenderHtmlOptions = {
 const INDENT = "    ";
 const OVERVIEW_RULER_CENTER = 2;
 const DEVICE_TREE_EXTENSIONS = new Set([".dts", ".dtsi", ".dtso"]);
+
+type IncludeFileEntry = {
+  id: string;
+  displayName: string;
+  fullPath: string;
+  color: string;
+  colorIndex: number;
+};
 
 function escapeHtml(value: string): string {
   return value
@@ -351,6 +360,20 @@ function sourceColorCss(fileColors: Map<string, string>): string {
   }).join("\n");
 }
 
+function includeFileEntry(file: string, root: string, fileColors: Map<string, string>): IncludeFileEntry {
+  if (!fileColors.has(file)) {
+    fileColors.set(file, colorForFile(file));
+  }
+
+  return {
+    id: `include-file-${[...fileColors.keys()].indexOf(file)}`,
+    displayName: displayFileName(file, root),
+    fullPath: file,
+    color: fileColors.get(file) ?? colorForFile(file),
+    colorIndex: [...fileColors.keys()].indexOf(file),
+  };
+}
+
 function renderIncludeHierarchy(
   rootFile: string | undefined,
   includeGraph: Map<string, Set<string>> | undefined,
@@ -365,20 +388,13 @@ function renderIncludeHierarchy(
   const missing = missingIncludeFiles(diagnostics);
   const shown = new Set<string>();
 
-  function color(file: string): string {
-    if (!fileColors.has(file)) {
-      fileColors.set(file, colorForFile(file));
-    }
-
-    return fileColors.get(file) ?? colorForFile(file);
-  }
-
   function childrenFor(file: string): string[] {
     return [...(includeGraph?.get(file) ?? [])].sort((a, b) => a.localeCompare(b));
   }
 
   function row(file: string, depth: number, branch: string, duplicate: boolean): string {
     const missingFile = missing.has(file);
+    const entry = includeFileEntry(file, root, fileColors);
     const classes = [
       "include-tree-row",
       missingFile ? "include-tree-row-missing" : "",
@@ -389,7 +405,18 @@ function renderIncludeHierarchy(
     return `
       <div class="${classes}" style="padding-left: ${depth * 18}px" title="${escapeHtml(file)}${suffix}">
         <span class="include-tree-branch">${escapeHtml(branch)}</span>
-        <span class="include-tree-file" style="color: ${color(file)}">${escapeHtml(displayFileName(file, root))}</span>
+        <span class="include-tree-swatch" style="background: ${entry.color}"></span>
+        <button
+          id="${entry.id}"
+          class="include-tree-file"
+          type="button"
+          data-file-id="${entry.id}"
+          data-file-path="${escapeHtml(entry.fullPath)}"
+          data-display-name="${escapeHtml(entry.displayName)}"
+          data-color-index="${entry.colorIndex}"
+          style="color: ${entry.color}"
+          title="${escapeHtml(entry.fullPath)}"
+        >${escapeHtml(entry.displayName)}</button>
         ${missingFile ? '<span class="include-tree-warning">⚠ Missing</span>' : ""}
         ${duplicate ? '<span class="include-tree-note">already shown</span>' : ""}
       </div>`;
@@ -440,6 +467,7 @@ export function renderHtml(root: DtNode, optionsOrRootFile?: RenderHtmlOptions |
     ? { rootFile: optionsOrRootFile }
     : optionsOrRootFile ?? {};
   const nonce = nonceValue(options.nonce);
+  const activeFile = options.activeFile ? path.resolve(options.activeFile) : undefined;
   const cspSource = options.cspSource ?? "'self'";
   const monacoBaseUri = options.monacoBaseUri ?? "";
   const model = renderPreviewModel(root);
@@ -496,8 +524,40 @@ body {
   color: var(--vscode-descriptionForeground);
 }
 
+.include-tree-swatch {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  border-radius: 2px;
+}
+
 .include-tree-file {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
   font-weight: 600;
+  margin: 0;
+  padding: 1px 4px;
+  text-align: left;
+}
+
+.include-tree-file:hover {
+  background: var(--vscode-list-hoverBackground);
+  text-decoration: underline;
+}
+
+.include-tree-file:focus {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+.include-tree-file.active-file {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground) !important;
 }
 
 .include-tree-warning,
@@ -554,6 +614,7 @@ ${includeHierarchy}
 <div id="editor"></div>
 <script nonce="${nonce}">
 const previewData = ${jsonScript({
+    activeFile,
     text: model.text,
     decorations: model.decorations,
     monacoBaseUri,
@@ -617,6 +678,35 @@ require(['vs/editor/editor.main'], function () {
   });
 
   editor.createDecorationsCollection(previewData.decorations);
+  function setActiveFile(file) {
+    document.querySelectorAll('.include-tree-file.active-file').forEach(function (item) {
+      item.classList.remove('active-file');
+    });
+
+    if (!file) {
+      return;
+    }
+
+    document.querySelectorAll('.include-tree-file').forEach(function (item) {
+      if (item.dataset.filePath === file) {
+        item.classList.add('active-file');
+      }
+    });
+  }
+
+  document.querySelectorAll('.include-tree-file').forEach(function (item) {
+    item.addEventListener('click', function () {
+      if (item.dataset.filePath) {
+        vscodeApi.postMessage({
+          command: 'openFile',
+          file: item.dataset.filePath
+        });
+      }
+    });
+  });
+
+  setActiveFile(previewData.activeFile);
+
   window.addEventListener('keydown', function (event) {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
       event.preventDefault();
@@ -627,6 +717,8 @@ require(['vs/editor/editor.main'], function () {
     if (event.data && event.data.type === 'updatePreview') {
       editor.setValue(event.data.text);
       editor.createDecorationsCollection(event.data.decorations);
+    } else if (event.data && event.data.command === 'activeFile') {
+      setActiveFile(event.data.file);
     }
   });
   vscodeApi.setState({ initialized: true });

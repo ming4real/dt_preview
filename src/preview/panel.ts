@@ -36,6 +36,10 @@ export class DeviceTreePreviewPanel {
         this.dependencyGraph.clear();
         this.dependencyClosure.clear();
       });
+
+      this.panel.webview.onDidReceiveMessage(message => {
+        void this.handleWebviewMessage(message);
+      });
     }
   }
 
@@ -66,6 +70,7 @@ export class DeviceTreePreviewPanel {
         message: "No preview root selected. Run Device Tree: Preview This DTS as Root.",
       }],
     }, {
+      activeFile: this.activeEditorFile(),
       cspSource: this.panel!.webview.cspSource,
       monacoBaseUri: monacoBaseUri.toString(),
       nonce: this.createNonce(),
@@ -120,6 +125,7 @@ export class DeviceTreePreviewPanel {
         vscode.Uri.joinPath(extensionUri, "node_modules", "monaco-editor", "min", "vs")
       );
       this.panel!.webview.html = renderHtml(merged, {
+        activeFile: this.activeEditorFile(),
         cspSource: this.panel!.webview.cspSource,
         includeGraph: dependencyGraph,
         monacoBaseUri: monacoBaseUri.toString(),
@@ -136,6 +142,15 @@ export class DeviceTreePreviewPanel {
     } catch (error) {
       this.panel!.webview.html = `<pre>${String(error)}</pre>`;
     }
+  }
+
+  static handleActiveEditorChange(editor: vscode.TextEditor | undefined) {
+    const file = editor ? path.resolve(editor.document.uri.fsPath) : undefined;
+
+    void this.panel?.webview.postMessage({
+      command: "activeFile",
+      file,
+    });
   }
 
   static handleDocumentChange(changedFile: string, extensionUri: vscode.Uri) {
@@ -169,6 +184,36 @@ export class DeviceTreePreviewPanel {
 
     return document?.getText() ?? fs.readFileSync(resolvedFile, "utf8");
   };
+
+  private static activeEditorFile(): string | undefined {
+    const file = vscode.window.activeTextEditor?.document.uri.fsPath;
+
+    return file ? path.resolve(file) : undefined;
+  }
+
+  private static async handleWebviewMessage(message: unknown) {
+    if (!message || typeof message !== "object" || !("command" in message)) {
+      return;
+    }
+
+    if (message.command === "openFile" && "file" in message && typeof message.file === "string") {
+      const file = message.file;
+      const uri = vscode.Uri.file(file);
+      let doc: vscode.TextDocument;
+
+      try {
+        doc = await vscode.workspace.openTextDocument(uri);
+      } catch (error) {
+        vscode.window.showErrorMessage(`Unable to open ${file}: ${String(error)}`);
+        return;
+      }
+
+      await vscode.window.showTextDocument(doc, {
+        preview: false,
+        preserveFocus: false,
+      });
+    }
+  }
 
   private static log(entry: {
     rootFile: string;
