@@ -13,10 +13,6 @@ export function activate(context: vscode.ExtensionContext) {
     DeviceTreePreviewPanel.previewThisDtsAsRoot(editor.document.uri.fsPath, context.extensionUri);
   }
 
-  const openPreview = vscode.commands.registerCommand("dtbEditor.openPreview", () => {
-    DeviceTreePreviewPanel.show(context.extensionUri);
-  });
-
   const previewRoot = vscode.commands.registerCommand("dtbEditor.previewThisDtsAsRoot", previewActiveEditorAsRoot);
   const useActiveEditorAsRoot = vscode.commands.registerCommand("dtbEditor.useActiveEditorAsRoot", previewActiveEditorAsRoot);
 
@@ -28,7 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   });
 
-  context.subscriptions.push(openPreview, previewRoot, useActiveEditorAsRoot, changeWatcher);
+  context.subscriptions.push(previewRoot, useActiveEditorAsRoot, changeWatcher);
 }
 
 export function deactivate() {}

@@ -2,7 +2,7 @@
   "name": "dtbe",
   "displayName": "dtbe",
   "description": "",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.125.0"
   },
@@ -13,12 +13,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "dtbEditor.openPreview",
-        "title": "Device Tree: Open Preview"
-      },
-      {
         "command": "dtbEditor.previewThisDtsAsRoot",
-        "title": "Device Tree: Preview This DTS as Root"
+        "title": "Device Tree: Preview This DTS"
       },
       {
         "command": "dtbEditor.useActiveEditorAsRoot",
