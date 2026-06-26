@@ -3,7 +3,7 @@
   "displayName": "dtbe",
   "description": "Device Tree Editor - Live Preview of merged sources",
   "icon": "images/icon.png",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "engines": {
     "vscode": "^1.125.0"
   },
