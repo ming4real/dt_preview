@@ -1,9 +1,10 @@
 {
-  "name": "dtbe",
-  "displayName": "dtbe",
+  "publisher": "SiliconBlade",
+  "name": "dtb-editor",
+  "displayName": "Device Tree Editor",
   "description": "Device Tree Editor - Live Preview of merged sources",
   "icon": "images/icon.png",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "engines": {
     "vscode": "^1.125.0"
   },
