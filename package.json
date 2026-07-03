@@ -4,7 +4,7 @@
   "displayName": "Device Tree Editor",
   "description": "Device Tree Editor - Live Preview of merged sources",
   "icon": "images/icon.png",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "engines": {
     "vscode": "^1.125.0"
   },

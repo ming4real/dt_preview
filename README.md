@@ -1,6 +1,6 @@
 # Device Tree Editor
 
-![Logo](https://github.com/ming4real/dt_preview/blob/main/images/Logo.png)
+![Logo](https://raw.githubusercontent.com/ming4real/dt_preview/main/images/Logo.png)
 
 Device Tree Editor is a Visual Studio Code extension for inspecting Linux Device Tree source trees. It builds a merged preview from a root `.dts` or `.dtsi` file, tracks where each rendered line came from, and makes large include hierarchies easier to follow.
 
@@ -18,7 +18,7 @@ Device Tree Editor is a Visual Studio Code extension for inspecting Linux Device
 - Keep missing Device Tree includes visible in the file key without injecting warning comments into the rendered DTS.
 - Render the preview including syntax highlighting and search.
 
-![Screenshot](https://github.com/ming4real/dt_preview/blob/main/images/screenshot_1.png)
+![Screenshot](https://raw.githubusercontent.com/ming4real/dt_preview/main/images/screenshot_1.png)
 
 ## Usage
 
