@@ -15,6 +15,7 @@ export function nodeKey(node: DtNode): string {
 function cloneProperty(property: DtProperty): DtProperty {
   return {
     ...property,
+    originalText: property.originalText,
     source: { ...property.source },
     deletedBy: property.deletedBy ? { ...property.deletedBy } : undefined,
   };

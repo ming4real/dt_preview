@@ -13,6 +13,7 @@ export type DtDiagnostic = {
 export type DtProperty = {
   name: string;
   value: string;
+  originalText?: string;
   source: SourceSpan;
   deletedBy?: SourceSpan;
 };

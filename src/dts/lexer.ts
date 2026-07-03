@@ -3,6 +3,8 @@ export type SourceLocation = {
   line: number;
   column: number;
   offset: number;
+  endOffset?: number;
+  sourceText?: string;
 };
 
 export type TokenType =
@@ -32,7 +34,7 @@ export function lexDts(input: string, file: string, startLine = 1): Token[] {
   let column = 1;
 
   function loc(): SourceLocation {
-    return { file, line, column, offset: i };
+    return { file, line, column, offset: i, sourceText: input };
   }
 
   function peek(n = 0): string {
@@ -53,7 +55,7 @@ export function lexDts(input: string, file: string, startLine = 1): Token[] {
   }
 
   function add(type: TokenType, value: string, location: SourceLocation) {
-    tokens.push({ type, value, location });
+    tokens.push({ type, value, location: { ...location, endOffset: i } });
   }
 
   function isWhitespace(ch: string): boolean {

@@ -139,9 +139,39 @@ suite('Extension Test Suite', () => {
 		assert.strictEqual(prop(node, 'st'), undefined);
 		assert.strictEqual(prop(node, 'drive'), undefined);
 		assert.ok(model.text.includes('        st,drive;'));
-		assert.ok(model.text.includes('        qcom,foo = < 1 >;'));
+		assert.ok(model.text.includes('        qcom,foo = <1>;'));
 		assert.ok(model.text.includes('        nvidia,enable-hw-based-cs;'));
 		assert.ok(!model.text.includes('        st;\n        drive;'));
+	});
+
+	test('renders DTS properties without inserting invalid token spaces', () => {
+		const root = merge(`
+/ {
+	node {
+		pinctrl-0 = <&sdmmc1_pins_mx>;
+		clocks = <&rcc GPIOA>;
+		gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>;
+		reg = <0x5a001000 0x400>;
+		local-mac-address = [00 80 e1 42 35 17];
+		st,drive;
+		compatible = "st,stm32mp157c-ed1", "st,stm32mp157";
+	};
+};
+`);
+		const model = renderPreviewModel(root);
+
+		assert.ok(model.text.includes('        pinctrl-0 = <&sdmmc1_pins_mx>;'));
+		assert.ok(model.text.includes('        clocks = <&rcc GPIOA>;'));
+		assert.ok(model.text.includes('        gpios = <&gpioa 5 GPIO_ACTIVE_HIGH>;'));
+		assert.ok(model.text.includes('        reg = <0x5a001000 0x400>;'));
+		assert.ok(model.text.includes('        local-mac-address = [00 80 e1 42 35 17];'));
+		assert.ok(model.text.includes('        st,drive;'));
+		assert.ok(model.text.includes('        compatible = "st,stm32mp157c-ed1", "st,stm32mp157";'));
+		assert.ok(!model.text.includes('< &'));
+		assert.ok(!model.text.includes('& sdmmc1_pins_mx'));
+		assert.ok(!model.text.includes(' >;'));
+		assert.ok(!model.text.includes('[ 00'));
+		assert.ok(!model.text.includes('17 ];'));
 	});
 
 	test('applies overlay fragments by target label', () => {
@@ -466,7 +496,7 @@ fragment@1 {
 		assert.strictEqual(model.text, [
 			'/ {',
 			'    from-a;',
-			'    from-b = < 1 >;',
+			'    from-b = <1>;',
 			'};',
 		].join('\n'));
 		assert.strictEqual(model.fileColors.size, 3);

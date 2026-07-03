@@ -120,9 +120,23 @@ function nodeName(node: DtNode): string {
 }
 
 function propertyText(property: DtProperty): string {
+  if (property.originalText) {
+    return property.originalText;
+  }
+
   return property.value === "true"
     ? `${property.name};`
-    : `${property.name} = ${property.value};`;
+    : `${property.name} = ${formatDtsValue(property.value)};`;
+}
+
+function formatDtsValue(value: string): string {
+  return value
+    .replace(/<\s*&\s*/g, "<&")
+    .replace(/<\s+/g, "<")
+    .replace(/\s+>/g, ">")
+    .replace(/\[\s+/g, "[")
+    .replace(/\s+\]/g, "]")
+    .replace(/,\s*/g, ", ");
 }
 
 function deletionCommentStart(source: SourceSpan): string {

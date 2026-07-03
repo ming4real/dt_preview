@@ -53,36 +53,49 @@ function parseTokens(tokens: Token[], file: string): DtNode {
     };
   }
 
-  function readValueUntilSemicolon(): string {
+  function originalTextFrom(start: Token, end?: Token): string | undefined {
+    const sourceText = start.location.sourceText;
+    const endOffset = end?.location.endOffset;
+
+    if (!sourceText || endOffset === undefined || end?.location.sourceText !== sourceText) {
+      return undefined;
+    }
+
+    return sourceText.slice(start.location.offset, endOffset).trim();
+  }
+
+  function readValueUntilSemicolon(): { value: string; endToken?: Token } {
     const parts: string[] = [];
 
     while (peek() && peek().type !== "eof" && peek().value !== ";") {
       parts.push(advance().value);
     }
 
-    match(";");
+    const endToken = match(";") ? tokens[pos - 1] : undefined;
 
-    return parts.join(" ");
+    return { value: parts.join(" "), endToken };
   }
 
   function parseProperty(startToken: Token): DtProperty {
     const name = startToken.value;
 
     if (match("=")) {
-      const value = readValueUntilSemicolon();
+      const { value, endToken } = readValueUntilSemicolon();
 
       return {
         name,
         value,
+        originalText: originalTextFrom(startToken, endToken),
         source: spanFrom(startToken),
       };
     }
 
-    match(";");
+    const endToken = match(";") ? tokens[pos - 1] : undefined;
 
     return {
       name,
       value: "true",
+      originalText: originalTextFrom(startToken, endToken),
       source: spanFrom(startToken),
     };
   }
