@@ -27,6 +27,12 @@ function prop(node: DtNode, name: string): string | undefined {
 	return node.properties.find(item => item.name === name)?.value;
 }
 
+function unresolvedReferenceDecorations(root: DtNode) {
+	return renderPreviewModel(root).decorations.filter(item =>
+		item.options.className === 'dtbe-unresolved-reference'
+	);
+}
+
 function withFiles(files: Record<string, string>, run: (dir: string) => void) {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dtbe-test-'));
 
@@ -297,6 +303,132 @@ fragment@1 {
 		assert.strictEqual(prop(serial, 'current-speed'), '< 115200 >');
 		assert.ok(html.includes('vs/editor/editor.main'));
 		assert.ok(renderPreviewModel(root).text.includes('uart0: serial@40002000 {'));
+	});
+
+	test('does not highlight valid reference to label from included DTSI', () => {
+		withFiles({
+			'main.dts': [
+				'#include "base.dtsi"',
+				'&pinmux {',
+				'	status = "okay";',
+				'};',
+			].join('\n'),
+			'base.dtsi': [
+				'/ {',
+				'	pinmux: pinmux@50002000 {',
+				'		status = "disabled";',
+				'	};',
+				'};',
+			].join('\n'),
+		}, dir => {
+			const root = mergeFile(path.join(dir, 'main.dts'));
+			const pinmux = child(root, 'pinmux', '50002000');
+
+			assert.strictEqual(prop(pinmux, 'status'), '"okay"');
+			assert.strictEqual(unresolvedReferenceDecorations(root).length, 0);
+			assert.ok(!root.diagnostics?.some(item => item.message.includes('Unresolved node reference')));
+		});
+	});
+
+	test('does not highlight valid reference to label from root DTS', () => {
+		const root = merge(`
+/ {
+	pinmux: pinmux@50002000 {
+		status = "disabled";
+	};
+};
+&pinmux {
+	status = "okay";
+};
+`);
+		const pinmux = child(root, 'pinmux', '50002000');
+
+		assert.strictEqual(prop(pinmux, 'status'), '"okay"');
+		assert.strictEqual(unresolvedReferenceDecorations(root).length, 0);
+		assert.ok(!root.diagnostics?.some(item => item.message.includes('Unresolved node reference')));
+	});
+
+	test('highlights invalid node reference and keeps it rendered', () => {
+		const root = merge(`
+&no-such-node {
+	status = "okay";
+};
+`);
+		const model = renderPreviewModel(root);
+		const decorations = unresolvedReferenceDecorations(root);
+		const expectedMessage = 'Unresolved node reference: &no-such-node. No node label "no-such-node" was found in the root DTS or included files.';
+
+		assert.ok(model.text.includes('&no-such-node {'));
+		assert.ok(model.text.includes('    status = "okay";'));
+		assert.strictEqual(decorations.length, 1);
+		assert.strictEqual(decorations[0].options.hoverMessage?.value, expectedMessage);
+		assert.ok(root.diagnostics?.some(item => item.message === expectedMessage));
+	});
+
+	test('keeps unresolved reference highlight aligned after multiline properties', () => {
+		const root = merge(`
+/ {
+	rcc {
+		st,clksrc = < CLK_MPU_PLL1P
+			CLK_AXI_PLL2P
+			CLK_MCU_PLL3P >;
+	};
+	pinctrl {
+		rtc_pins_mx: rtc_mx-0 {};
+	};
+};
+&ming {
+	status = "okay";
+};
+`);
+		const model = renderPreviewModel(root);
+		const lines = model.text.split('\n');
+		const referenceLine = lines.findIndex(line => line.includes('&ming {')) + 1;
+		const pinctrlLine = lines.findIndex(line => line.includes('pinctrl {')) + 1;
+		const decoration = unresolvedReferenceDecorations(root)[0];
+
+		assert.ok(referenceLine > pinctrlLine);
+		assert.strictEqual(decoration.range.startLineNumber, referenceLine);
+		assert.ok(decoration.options.hoverMessage?.value.includes('&ming'));
+		assert.ok(!lines[decoration.range.startLineNumber - 1].includes('pinctrl'));
+	});
+
+	test('highlights multiple invalid node references', () => {
+		const root = merge(`
+&first_missing {
+	status = "okay";
+};
+&second_missing {
+	reg = <0x5a001000 0x400>;
+};
+`);
+		const model = renderPreviewModel(root);
+		const decorations = unresolvedReferenceDecorations(root);
+
+		assert.ok(model.text.includes('&first_missing {'));
+		assert.ok(model.text.includes('&second_missing {'));
+		assert.ok(model.text.includes('    reg = <0x5a001000 0x400>;'));
+		assert.strictEqual(decorations.length, 2);
+		assert.ok(decorations.some(item => item.options.hoverMessage?.value.includes('&first_missing')));
+		assert.ok(decorations.some(item => item.options.hoverMessage?.value.includes('&second_missing')));
+	});
+
+	test('allows labels defined after reference in the parsed source tree', () => {
+		const root = merge(`
+&late_label {
+	status = "okay";
+};
+/ {
+	late_label: node@1000 {
+		status = "disabled";
+	};
+};
+`);
+		const lateNode = child(root, 'node', '1000');
+
+		assert.strictEqual(prop(lateNode, 'status'), '"okay"');
+		assert.strictEqual(unresolvedReferenceDecorations(root).length, 0);
+		assert.ok(!root.diagnostics?.some(item => item.message.includes('Unresolved node reference')));
 	});
 
 	test('does not overwrite an existing target display label during merge', () => {

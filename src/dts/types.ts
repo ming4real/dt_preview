@@ -32,6 +32,7 @@ export type DtNode = {
   labels: string[];
   kind?: "node" | "root" | "reference";
   referenceLabel?: string;
+  unresolvedReference?: DtDiagnostic;
   deletedBy?: SourceSpan;
   properties: DtProperty[];
   children: DtNode[];

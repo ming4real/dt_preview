@@ -200,6 +200,29 @@ function decorationForDeletedBlock(
   };
 }
 
+function decorationForUnresolvedReference(
+  startLineNumber: number,
+  endLineNumber: number,
+  endLine: string,
+  message: string
+): MonacoPreviewDecoration {
+  return {
+    range: rangeForLines(startLineNumber, endLineNumber, endLine),
+    options: {
+      className: "dtbe-unresolved-reference",
+      inlineClassName: "dtbe-unresolved-reference-inline",
+      isWholeLine: true,
+      linesDecorationsClassName: "dtbe-unresolved-reference-line",
+      hoverMessage: { value: message },
+      overviewRuler: {
+        color: "var(--vscode-editorError-foreground)",
+        position: OVERVIEW_RULER_CENTER,
+      },
+      zIndex: 90,
+    },
+  };
+}
+
 function fileClass(index: number): string {
   return `dt-source-${index}`;
 }
@@ -226,23 +249,33 @@ export function renderPreviewModel(root: DtNode): MonacoPreviewModel {
     source: SourceSpan;
   }> = [];
   const deletedRanges: DeletedPreviewRange[] = [];
+  const unresolvedReferenceRanges: Array<{
+    startLine: number;
+    endLine: number;
+    message: string;
+  }> = [];
 
   function pushLine(
     line: string,
     source?: SourceSpan
   ): number {
-    lines.push(line);
-    const lineNumber = lines.length;
+    const lineParts = line.split(/\r?\n/);
+    const firstLineNumber = lines.length + 1;
 
-    if (source) {
-      sourceLines.push({
-        line,
-        lineNumber,
-        source,
-      });
+    for (const linePart of lineParts) {
+      lines.push(linePart);
+      const lineNumber = lines.length;
+
+      if (source) {
+        sourceLines.push({
+          line: linePart,
+          lineNumber,
+          source,
+        });
+      }
     }
 
-    return lineNumber;
+    return firstLineNumber;
   }
 
   function propertyLine(property: DtProperty, depth: number): string {
@@ -316,7 +349,7 @@ export function renderPreviewModel(root: DtNode): MonacoPreviewModel {
       return;
     }
 
-    pushLine(nodeOpenLine(node, depth), node.source);
+    const startLine = pushLine(nodeOpenLine(node, depth), node.source);
 
     for (const property of node.properties) {
       renderProperty(property, depth + 1);
@@ -326,7 +359,15 @@ export function renderPreviewModel(root: DtNode): MonacoPreviewModel {
       renderNode(child, depth + 1);
     }
 
-    pushLine(`${INDENT.repeat(depth)}};`, node.source);
+    const endLine = pushLine(`${INDENT.repeat(depth)}};`, node.source);
+
+    if (node.unresolvedReference) {
+      unresolvedReferenceRanges.push({
+        startLine,
+        endLine,
+        message: node.unresolvedReference.message,
+      });
+    }
   }
 
   renderNode(root, 0);
@@ -343,6 +384,15 @@ export function renderPreviewModel(root: DtNode): MonacoPreviewModel {
       range.endLine,
       lines[range.endLine - 1] ?? "",
       range.deleteSource
+    ));
+  }
+
+  for (const range of unresolvedReferenceRanges) {
+    decorations.push(decorationForUnresolvedReference(
+      range.startLine,
+      range.endLine,
+      lines[range.endLine - 1] ?? "",
+      range.message
     ));
   }
 
@@ -613,6 +663,16 @@ body {
 
 .dtbe-deleted-block-line {
   border-left: 4px solid var(--vscode-disabledForeground);
+}
+
+.dtbe-unresolved-reference,
+.dtbe-unresolved-reference-inline {
+  background: color-mix(in srgb, var(--vscode-editorError-foreground) 16%, transparent);
+  text-decoration: underline wavy var(--vscode-editorError-foreground);
+}
+
+.dtbe-unresolved-reference-line {
+  border-left: 4px solid var(--vscode-editorError-foreground);
 }
 
 .lines-content .cdr {

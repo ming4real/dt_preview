@@ -28,6 +28,7 @@ export function parseDts(text: string, file: string): DtNode {
 
 function parseTokens(tokens: Token[], file: string): DtNode {
   let pos = 0;
+  const referenceNodes: DtNode[] = [];
 
   function peek(offset = 0): Token {
     return tokens[pos + offset];
@@ -209,6 +210,8 @@ function parseTokens(tokens: Token[], file: string): DtNode {
       source: spanFrom(ampersand),
     };
 
+    referenceNodes.push(node);
+
     if (!match("{")) {
       return node;
     }
@@ -242,6 +245,33 @@ function parseTokens(tokens: Token[], file: string): DtNode {
     return node;
   }
 
+  function collectLabels(node: DtNode, labels: Set<string>) {
+    for (const label of node.labels) {
+      labels.add(label);
+    }
+
+    for (const child of node.children) {
+      collectLabels(child, labels);
+    }
+  }
+
+  function markUnresolvedReferences(root: DtNode) {
+    const labels = new Set<string>();
+    collectLabels(root, labels);
+
+    for (const referenceNode of referenceNodes) {
+      const label = referenceNode.referenceLabel;
+
+      if (label && !labels.has(label)) {
+        referenceNode.unresolvedReference = {
+          severity: "warning",
+          message: `Unresolved node reference: &${label}. No node label "${label}" was found in the root DTS or included files.`,
+          source: referenceNode.source,
+        };
+      }
+    }
+  }
+
   const root: DtNode = {
     name: "/",
     labels: [],
@@ -270,6 +300,8 @@ function parseTokens(tokens: Token[], file: string): DtNode {
       }
     }
   }
+
+  markUnresolvedReferences(root);
 
   return root;
 }

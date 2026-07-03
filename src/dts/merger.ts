@@ -29,6 +29,10 @@ function cloneNode(node: DtNode): DtNode {
   return {
     ...node,
     labels: [...node.labels],
+    unresolvedReference: node.unresolvedReference ? {
+      ...node.unresolvedReference,
+      source: node.unresolvedReference.source ? cloneSource(node.unresolvedReference.source) : undefined,
+    } : undefined,
     deletedBy: node.deletedBy ? cloneSource(node.deletedBy) : undefined,
     properties: node.properties.map(cloneProperty),
     children: node.children.map(cloneNode),
@@ -46,6 +50,13 @@ function addWarning(ctx: MergeContext, message: string, node?: DtNode) {
     severity: "warning",
     message,
     source: node?.source,
+  });
+}
+
+function addDiagnostic(ctx: MergeContext, diagnostic: DtDiagnostic) {
+  ctx.warnings.push({
+    ...diagnostic,
+    source: diagnostic.source ? cloneSource(diagnostic.source) : undefined,
   });
 }
 
@@ -233,10 +244,27 @@ export function applyTopLevelItem(item: DtNode, ctx: MergeContext) {
 
   if (item.kind === "reference") {
     const label = item.referenceLabel ?? item.name.replace(/^&/, "");
+
+    if (item.unresolvedReference) {
+      const cloned = cloneNode(item);
+      ctx.root.children.push(cloned);
+      addDiagnostic(ctx, item.unresolvedReference);
+      return;
+    }
+
     const target = ctx.labels.get(label);
 
     if (!target) {
-      addWarning(ctx, `Unresolved label reference &${label}`, item);
+      const cloned = cloneNode({
+        ...item,
+        unresolvedReference: {
+          severity: "warning",
+          message: `Unresolved node reference: &${label}. No node label "${label}" was found in the root DTS or included files.`,
+          source: item.source,
+        },
+      });
+      ctx.root.children.push(cloned);
+      addDiagnostic(ctx, cloned.unresolvedReference!);
       return;
     }
 
@@ -324,8 +352,18 @@ export function applyOverlayFragments(ctx: MergeContext) {
 
 export function mergeTrees(root: DtNode): DtNode {
   const ctx = createContext(root);
+  const references: DtNode[] = [];
 
   for (const item of root.children) {
+    if (item.kind === "reference") {
+      references.push(item);
+      continue;
+    }
+
+    applyTopLevelItem(item, ctx);
+  }
+
+  for (const item of references) {
     applyTopLevelItem(item, ctx);
   }
 
