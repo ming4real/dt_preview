@@ -49,6 +49,10 @@ export type RenderHtmlOptions = {
 const INDENT = "    ";
 const OVERVIEW_RULER_CENTER = 2;
 const DEVICE_TREE_EXTENSIONS = new Set([".dts", ".dtsi", ".dtso"]);
+const NODE_NAME_COLLATOR = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
 
 type IncludeFileEntry = {
   id: string;
@@ -117,6 +121,14 @@ function nodeName(node: DtNode): string {
   return node.name === "/"
     ? "/"
     : `${node.name}${node.unitAddress ? `@${node.unitAddress}` : ""}`;
+}
+
+function compareNodesByName(a: DtNode, b: DtNode): number {
+  return NODE_NAME_COLLATOR.compare(nodeName(a), nodeName(b));
+}
+
+function sortedChildren(node: DtNode): DtNode[] {
+  return [...node.children].sort(compareNodesByName);
 }
 
 function propertyText(property: DtProperty): string {
@@ -299,7 +311,7 @@ export function renderPreviewModel(root: DtNode): MonacoPreviewModel {
       nodeLines.push(propertyLine(property, depth + 1));
     }
 
-    for (const child of node.children) {
+    for (const child of sortedChildren(node)) {
       nodeLines.push(...collectNodeLines(child, depth + 1));
     }
 
@@ -355,7 +367,7 @@ export function renderPreviewModel(root: DtNode): MonacoPreviewModel {
       renderProperty(property, depth + 1);
     }
 
-    for (const child of node.children) {
+    for (const child of sortedChildren(node)) {
       renderNode(child, depth + 1);
     }
 

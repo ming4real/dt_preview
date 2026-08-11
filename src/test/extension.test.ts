@@ -33,6 +33,18 @@ function unresolvedReferenceDecorations(root: DtNode) {
 	);
 }
 
+function assertLinesInOrder(text: string, expectedLines: string[]) {
+	let lastIndex = -1;
+
+	for (const expectedLine of expectedLines) {
+		const index = text.indexOf(expectedLine);
+
+		assert.ok(index >= 0, `Expected rendered text to include ${expectedLine}`);
+		assert.ok(index > lastIndex, `Expected ${expectedLine} to appear after previous line`);
+		lastIndex = index;
+	}
+}
+
 function withFiles(files: Record<string, string>, run: (dir: string) => void) {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dtbe-test-'));
 
@@ -464,6 +476,88 @@ fragment@1 {
 		assert.ok(model.text.includes('uart0: serial@40002000 {'));
 		assert.ok(model.text.includes('gpio@5000 {'));
 		assert.ok(!model.text.includes('undefined:'));
+	});
+
+	test('renders sibling nodes in natural case-insensitive alphanumeric order without mutating data', () => {
+		const root = merge(`
+/ {
+	node10 {};
+	Alpha {};
+	node2 {};
+	beta {};
+};
+`);
+		const model = renderPreviewModel(root);
+
+		assert.deepStrictEqual(root.children.map(item => item.name), ['node10', 'Alpha', 'node2', 'beta']);
+		assertLinesInOrder(model.text, [
+			'    Alpha {',
+			'    beta {',
+			'    node2 {',
+			'    node10 {',
+		]);
+	});
+
+	test('renders nested child nodes sorted at every level', () => {
+		const root = merge(`
+/ {
+	parent {
+		zeta {};
+		node10 {};
+		node2 {};
+		Alpha {};
+	};
+	another {};
+};
+`);
+		const model = renderPreviewModel(root);
+
+		assertLinesInOrder(model.text, [
+			'    another {',
+			'    parent {',
+			'        Alpha {',
+			'        node2 {',
+			'        node10 {',
+			'        zeta {',
+		]);
+	});
+
+	test('renders created and renamed nodes in their sorted positions', () => {
+		const initial = renderPreviewModel(merge(`
+/ {
+	node10 {};
+	node2 {};
+};
+`));
+		const edited = renderPreviewModel(merge(`
+/ {
+	node10 {};
+	node2 {};
+	node1 {};
+};
+`));
+		const renamed = renderPreviewModel(merge(`
+/ {
+	node10 {};
+	node03 {};
+	node1 {};
+};
+`));
+
+		assertLinesInOrder(initial.text, [
+			'    node2 {',
+			'    node10 {',
+		]);
+		assertLinesInOrder(edited.text, [
+			'    node1 {',
+			'    node2 {',
+			'    node10 {',
+		]);
+		assertLinesInOrder(renamed.text, [
+			'    node1 {',
+			'    node03 {',
+			'    node10 {',
+		]);
 	});
 
 	test('renders an include hierarchy at the top', () => {
